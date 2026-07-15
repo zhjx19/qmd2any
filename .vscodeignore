@@ -1,0 +1,82 @@
+# ── 版本控制 ─────────────────────────────────────────────────────────────────
+.git/
+.gitignore
+.github/
+
+# ── 编辑器配置 ────────────────────────────────────────────────────────────────
+.vscode/
+.DS_Store
+
+# ── Python 环境（扩展不需要） ─────────────────────────────────────────────────
+.venv/
+**/__pycache__/
+*.py
+*.pyc
+
+# ── 测试 / 临时文件 ───────────────────────────────────────────────────────────
+test.md
+test_xhs/
+
+# ── 构建产物 ──────────────────────────────────────────────────────────────────
+*.vsix
+out/
+dist/
+build/
+
+# ── 开发文档 / 备份文件 ──────────────────────────────────────────────────────
+CLAUDE.md
+icon.png.bak
+
+# ── 依赖锁文件（运行时不需要） ──────────────────────────────────────────────────
+package-lock.json
+
+# ── 开发专用 node_modules（运行时不需要） ───────────────────────────────────────
+node_modules/@vscode/
+node_modules/@azure/
+node_modules/@typespec/
+node_modules/.package-lock.json
+node_modules/.cache/
+
+# ── 全局 node_modules 瘦身：移除源码/文档/调试文件 ─────────────────────────────
+node_modules/**/*.ts
+node_modules/**/*.map
+node_modules/**/*.md
+node_modules/**/CHANGELOG*
+node_modules/**/CONTRIBUTING*
+node_modules/**/test/
+node_modules/**/tests/
+node_modules/**/__tests__/
+node_modules/**/docs/
+node_modules/**/examples/
+node_modules/**/example/
+
+# ── mathjax-full：只需 js/，不需要 ES5 转译版本和 TS 源码 ──────────────────────
+node_modules/mathjax-full/es5/
+node_modules/mathjax-full/ts/
+
+# ── highlight.js：只需 CommonJS 版本，不需要 ES Module 和 SCSS 源码 ───────────
+node_modules/highlight.js/es/
+node_modules/highlight.js/scss/
+
+# ── katex：只需 dist/（CSS+字体），不需要 TS 源码 ─────────────────────────────
+node_modules/katex/src/
+
+# ── ali-oss：只需 lib/（Node.js 入口），不需要 dist/（浏览器打包） ─────────────
+node_modules/ali-oss/dist/
+
+# ── playwright-core：只需 lib/ + bin/，不需要 types/（TS 类型声明） ────────────
+node_modules/playwright-core/types/
+
+# ── Electron 客户端（VS Code 插件不需要） ─────────────────────────────────────
+electron/
+electron-builder.yml
+node_modules/electron/
+node_modules/electron-builder/
+node_modules/@electron/
+
+# ── 知乎 API 上传已废弃（改用 Playwright 浏览器自动化） ───────────────────────
+node_modules/ali-oss/
+
+# ── 小红书截图已移除 ─────────────────────────────────────────────────────────
+node_modules/html2canvas/
+node_modules/pngjs/

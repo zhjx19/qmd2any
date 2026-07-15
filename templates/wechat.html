@@ -1,0 +1,244 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>文章</title>
+  <style type="text/css">
+
+    body {
+      width: 677px !important;
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+      margin: 0 auto;
+      padding: 20px;
+      background: #fff;
+    }
+
+    /* ── 正文通用 ── */
+    p, li, td, th {
+      text-align: left;
+      color: #3f3f3f;
+      line-height: 1.75em;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont,
+        'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB',
+        'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif;
+      font-size: 16px;
+      margin: 20px 20px;
+    }
+
+    strong {
+      font-weight: 600;
+      color: rgb(0, 122, 170);
+    }
+
+    /* ── 图片 ── */
+    img {
+      outline: none;
+      text-decoration: none;
+      -ms-interpolation-mode: bicubic;
+      max-width: 100%;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    a img { border: none; }
+
+    /* ── 图片说明文字（caption）── */
+    figcaption {
+      display: block;
+      text-align: center;
+      color: #999;
+      font-size: 14px;
+      margin-top: 8px;
+      margin-bottom: 4px;
+      line-height: 1.5;
+      font-style: normal;
+    }
+    figure {
+      margin: 1.5em auto;
+      text-align: center;
+    }
+
+    /* ── 段落 ── */
+    p { margin: 1.3em 0; }
+
+    /* ── 标题 ── */
+    h1, h2, h3, h4, h5, h6 {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont,
+        'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB',
+        'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif;
+      line-height: 1.5;
+      font-weight: normal;
+    }
+
+    h1 {
+      font-size: 140%;
+      color: #de7456;
+      text-align: center;
+    }
+
+    h2 {
+      font-size: 120%;
+      font-weight: bold;
+      color: #de7456;
+      text-align: center;
+      line-height: 2;
+      border-bottom: 1px solid #de7456;
+      display: block;
+      margin: 1em auto;
+      padding-bottom: 4px;
+    }
+
+    h3 {
+      font-size: 110%;
+      color: rgb(0, 122, 170);
+      border-left: 3px solid rgb(0, 122, 170);
+      padding-left: 10px;
+      margin: 30px 10px 20px;
+    }
+
+    h4, h5, h6 {
+      font-size: 100%;
+      color: rgb(0, 122, 170);
+      padding-left: 0;
+      margin: 20px 10px;
+    }
+
+    h1 a, h2 a, h3 a, h4 a, h5 a, h6 a { color: blue !important; }
+
+    /* ── 链接 ── */
+    a { color: orange; }
+
+    /* ── 引用块 ── */
+    blockquote {
+      border-left: 4px solid #ddd;
+      margin: 1.2em 0;
+      padding: 0.5em 1em;
+      color: #666;
+      background: #fafafa;
+    }
+    blockquote p { margin: 0; }
+
+    /* ── 表格 ── */
+    table {
+      border-collapse: collapse;
+      mso-table-lspace: 0pt;
+      mso-table-rspace: 0pt;
+      width: 100%;
+      margin: 1em 0;
+    }
+    table td, table th {
+      border-collapse: collapse;
+      border: 1px solid #999;
+      padding: 8px 10px;
+      min-height: 25px;
+      line-height: 1.5;
+    }
+    table th {
+      font-weight: bold;
+      color: #3f3f3f;
+      text-align: center;
+      background: #f2f2f2;
+    }
+
+    /* ── 列表 ── */
+    ul, ol { padding-left: 1.5em; }
+
+    /* ── 分隔线 ── */
+    hr {
+      border: none;
+      border-top: 1px solid #eee;
+      margin: 1.5em 0;
+    }
+
+    /* ── 行内代码 ── */
+    code {
+      background: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+      font-size: 14px;
+      color: #c7254e;
+    }
+
+    /* ── 代码块（macOS 风格） ── */
+    pre.mac-code {
+      font-size: 90%;
+      overflow-x: auto;
+      border-radius: 8px;
+      padding: 0 !important;
+      line-height: 1.5;
+      margin: 10px 8px;
+      background-color: #f6f8fa;
+      border: 1px solid #eaedf0;
+    }
+    .mac-dots {
+      display: block;
+      margin: 12px 16px 0;
+    }
+    pre.mac-code code.hljs {
+      display: block;
+      padding: 0.5em 1em 1em;
+      overflow-x: auto;
+      text-indent: 0;
+      color: inherit;
+      background: none;
+      white-space: pre-wrap;
+      word-break: break-all;
+      text-align: left;
+      direction: ltr;
+      margin: 0;
+    }
+
+    /* ── 数学公式 ── */
+    .math-block {
+      text-align: center;
+      overflow-x: auto;
+      margin: 1.2em 0;
+      padding: 0.5em 0;
+    }
+    .math-inline {
+      display: inline;
+    }
+
+    /* ── 文章内容容器 ── */
+    .post-content table {
+      font-size: inherit;
+      border-collapse: collapse;
+      margin-top: 10px;
+      margin-bottom: 10px;
+      width: 100%;
+    }
+    .post-content table td,
+    .post-content table th {
+      word-break: break-all;
+      word-wrap: break-word;
+      border: 1px solid #999;
+      padding: 10px;
+    }
+
+    /* ── 页脚 ── */
+    .footer { margin: 40px 20px 20px; }
+    .footer h4.old {
+      color: black;
+      font-size: 16px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 8px;
+    }
+    .footer .more { color: #dedede; }
+
+  </style>
+</head>
+<body>
+<div>
+  <!--文章内容-->
+  {{body}}
+  <!--结束-->
+</div>
+<div class="footer">
+  <!-- 在这里贴往期文章列表 -->
+</div>
+</body>
+</html>

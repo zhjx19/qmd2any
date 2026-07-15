@@ -1,0 +1,9 @@
+node_modules/
+*.vsix
+.DS_Store
+out/
+dist/
+build/
+*.log
+icon.png.bak
+.claude/settings.local.json

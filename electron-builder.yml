@@ -1,0 +1,30 @@
+appId: com.qmd2any.app
+productName: QMD2Any
+copyright: MIT
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - electron/**/*
+  - lib/**/*
+  - scripts/**/*
+  - templates/**/*
+  - package.json
+  - node_modules/**/*
+
+mac:
+  target:
+    - dmg
+    - zip
+  # icon: icon.png
+  category: public.app-category.productivity
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+extraMetadata:
+  main: electron/main.js
+
+asar: true
+asarUnpack:
+  - scripts/xhs_screenshot.js

@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QMD2Any - Markdown Export</title>
+
+  <!-- 外部资源已移除，避免 file:// 协议路径问题 -->
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #e8e8e8;
+      color: #333;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── 工具栏 ── */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: #2c2c2c;
+      border-bottom: 1px solid #444;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .toolbar-title {
+      flex: 1;
+      font-size: 12px;
+      color: #ccc;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 100px;
+    }
+    .btn {
+      padding: 4px 10px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-primary   { background: #07c160; color: #fff; }
+    .btn-primary:hover   { background: #06ad56; }
+    .btn-secondary { background: #555; color: #eee; }
+    .btn-secondary:hover { background: #666; }
+    .btn-active    { background: #0078d4; color: #fff; }
+    .btn-upload    { background: #f06529; color: #fff; }
+    .btn-upload:hover    { background: #d4551f; }
+    .btn-zhihu     { background: #0066ff; color: #fff; }
+    .btn-zhihu:hover     { background: #0052cc; }
+    .btn-xhs       { background: #ff2442; color: #fff; }
+    .btn-xhs:hover       { background: #d91c38; }
+    .btn-xhs-copy  { background: #ff6080; color: #fff; }
+    .btn-xhs-copy:hover  { background: #e04060; }
+    .btn:disabled  { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── 主区域 ── */
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── 编辑器 ── */
+    .editor-pane {
+      width: 45%;
+      min-width: 280px;
+      border-right: 2px solid #444;
+      display: flex;
+      flex-direction: column;
+      background: #1e1e1e;
+    }
+    #editor-textarea {
+      flex: 1;
+      width: 100%;
+      border: none;
+      outline: none;
+      resize: none;
+      padding: 16px;
+      font-family: 'Cascadia Code', 'Fira Code', 'SF Mono', Menlo, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      tab-size: 2;
+    }
+
+    /* ── 预览区域 ── */
+    .preview-pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 400px;
+    }
+    .preview-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      background: #e8e8e8;
+    }
+    .article-wrapper {
+      width: 100%;
+      max-width: 680px;
+      background: #ffffff;
+      padding: 32px 28px;
+      min-height: 200px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.08);
+    }
+
+    /* ── 侧边栏通用 ── */
+    .side-panel {
+      flex: 0 0 0%;
+      overflow: hidden;
+      transition: flex-basis 0.25s ease, width 0.25s ease;
+      background: #1e1e1e;
+      border-left: 1px solid #444;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .side-panel.open { flex-basis: 340px; width: 340px; }
+    .xhs-panel.open  { flex-basis: 480px; width: 480px; min-width: 340px; max-width: calc(100% - 220px); position: relative; }
+    .xhs-panel .resize-handle {
+      position: absolute; left: 0; top: 0; bottom: 0; width: 6px;
+      cursor: col-resize; background: rgba(255,255,255,0.06); z-index: 10;
+      display: none;
+    }
+    .xhs-panel.open .resize-handle { display: block; }
+    .xhs-panel .resize-handle:hover { background: #0078d4; }
+    .xhs-panel .resize-handle::after {
+      content: ''; position: absolute; left: 2px; top: 50%; transform: translateY(-50%);
+      width: 2px; height: 40px; background: #555; border-radius: 2px;
+    }
+    .xhs-panel .resize-handle:hover::after { background: #0078d4; }
+    .side-panel-header {
+      padding: 12px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #ccc;
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .panel-close-btn {
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 16px;
+      cursor: pointer;
+      padding: 0 2px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .panel-close-btn:hover { color: #fff; }
+    .side-panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      color: #aaa;
+      margin-bottom: 4px;
+      margin-top: 12px;
+    }
+    label:first-child { margin-top: 0; }
+    input[type=text], input[type=password], input[type=number], textarea {
+      width: 100%;
+      padding: 7px 10px;
+      background: #2d2d2d;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #e0e0e0;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, textarea:focus { border-color: #0078d4; }
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 12px;
+    }
+    #css-textarea { min-height: 300px; }
+    .panel-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .panel-actions .btn { flex: 1; }
+    .hint {
+      font-size: 11px;
+      color: #777;
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+    .hint a { color: #4fc3f7; }
+    .divider {
+      height: 1px;
+      background: #333;
+      margin: 14px 0;
+    }
+
+    /* ── 状态消息 ── */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #333;
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 9999;
+      white-space: nowrap;
+      max-width: 80vw;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    .toast.success { background: #07c160; }
+    .toast.error   { background: #c0392b; }
+
+    /* ── 上传结果区域 ── */
+    .upload-result {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 4px;
+      font-size: 13px;
+      display: none;
+    }
+    .upload-result.success { background: #1a3a1a; color: #aff; border: 1px solid #2a6a2a; }
+    .upload-result.error   { background: #3a1a1a; color: #faa; border: 1px solid #6a2a2a; }
+
+    /* ── 文章内容样式 ── */
+    .article-wrapper p,
+    .article-wrapper li,
+    .article-wrapper td,
+    .article-wrapper th {
+      text-align: left;
+      color: #3f3f3f;
+      line-height: 1.75em;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont,
+        'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB',
+        'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif;
+      font-size: 16px;
+    }
+    .article-wrapper strong { font-weight: 600; color: rgb(0, 122, 170); }
+    .article-wrapper img { outline: none; text-decoration: none; max-width: 100%; display: block; margin: 0 auto; }
+    .article-wrapper p { margin: 1.3em 0; }
+    .article-wrapper h1 { font-size: 140%; color: #de7456; text-align: center; }
+    .article-wrapper h2 {
+      font-size: 120%; font-weight: bold; color: #de7456;
+      text-align: center; line-height: 2;
+      border-bottom: 1px solid #de7456;
+      margin: 1em auto; padding-bottom: 4px;
+    }
+    .article-wrapper h3 {
+      font-size: 110%; color: rgb(0, 122, 170);
+      border-left: 3px solid rgb(0, 122, 170);
+      padding-left: 10px; margin: 24px 0;
+    }
+    .article-wrapper h4, .article-wrapper h5, .article-wrapper h6 {
+      font-size: 100%; color: rgb(0, 122, 170); margin: 16px 0;
+    }
+    .article-wrapper a { color: orange; }
+    .article-wrapper blockquote {
+      border-left: 4px solid #ddd;
+      margin: 1em 0;
+      padding: 0.5em 1em;
+      color: #666;
+      background: #fafafa;
+    }
+    .article-wrapper table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1em 0;
+    }
+    .article-wrapper table td,
+    .article-wrapper table th {
+      border: 1px solid #999;
+      padding: 8px;
+    }
+    .article-wrapper table th { background: #f2f2f2; font-weight: bold; text-align: center; }
+    .article-wrapper ul, .article-wrapper ol { padding-left: 1.5em; }
+    .article-wrapper figcaption {
+      display: block;
+      text-align: center;
+      color: #999;
+      font-size: 14px;
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+    .article-wrapper .math-block {
+      text-align: center;
+      overflow-x: auto;
+      margin: 1.2em 0;
+    }
+    .article-wrapper .math-inline { display: inline; }
+    .article-wrapper pre.mac-code {
+      border-radius: 8px;
+      background: #f6f8fa;
+      border: 1px solid #eaedf0;
+      overflow-x: auto;
+      margin: 10px 0;
+    }
+    .article-wrapper pre.mac-code code.hljs { padding: 10px 16px; }
+    .article-wrapper code:not([class]) {
+      background: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+
+    /* ── Todo 任务列表 ── */
+    .article-wrapper .task-list-item {
+      list-style: none;
+      margin-left: -1.2em;
+      padding-left: 0.2em;
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+    }
+    .article-wrapper .task-checkbox {
+      cursor: pointer;
+      margin-top: 0.35em;
+      flex-shrink: 0;
+      width: 15px;
+      height: 15px;
+      accent-color: #07c160;
+    }
+
+    /* ── 缩放 ── */
+    .zoom-controls {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      flex-shrink: 0;
+    }
+    .zoom-controls .btn {
+      padding: 4px 9px;
+      font-size: 14px;
+    }
+    #zoom-value {
+      font-size: 12px;
+      color: #ccc;
+      min-width: 40px;
+      text-align: center;
+      user-select: none;
+    }
+
+    /* ── XHS 输出 ── */
+    .xhs-img-item {
+      margin-bottom: 12px;
+      border: 1px solid #333;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .xhs-img-item img {
+      width: 100%;
+      display: block;
+      cursor: zoom-in;
+    }
+    .xhs-img-item .xhs-img-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: #111;
+      font-size: 12px;
+      color: #888;
+      gap: 6px;
+    }
+    .xhs-img-item .xhs-img-meta button {
+      padding: 3px 10px;
+      font-size: 12px;
+      background: #ff2442;
+      color: #fff;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    /* 全屏预览遮罩 */
+    #xhs-lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.85);
+      z-index: 99999;
+      align-items: center;
+      justify-content: center;
+      cursor: zoom-out;
+    }
+    #xhs-lightbox.show { display: flex; }
+    #xhs-lightbox img {
+      max-width: 90vw;
+      max-height: 92vh;
+      border-radius: 4px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.6);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 工具栏 -->
+  <div class="toolbar">
+    <button class="btn btn-secondary" id="btn-new" title="新建空白文件">📄 新建</button>
+    <button class="btn btn-secondary" id="btn-open" title="打开 Markdown 文件 (Cmd+O)">📂 打开</button>
+    <button class="btn btn-secondary" id="btn-save" title="保存文件 (Cmd+S)">💾 保存</button>
+    <span class="toolbar-title" id="doc-title">QMD2Any</span>
+    <select id="theme-select" title="切换主题" style="
+      padding:5px 8px; border:none; border-radius:4px; cursor:pointer;
+      font-size:13px; background:#3a3a3a; color:#eee; outline:none;
+    ">
+      <option value="">主题...</option>
+    </select>
+    <div class="zoom-controls">
+      <button class="btn btn-secondary" id="btn-zoom-out" title="缩小预览">－</button>
+      <span id="zoom-value">100%</span>
+      <button class="btn btn-secondary" id="btn-zoom-in" title="放大预览">＋</button>
+      <button class="btn btn-secondary" id="btn-zoom-reset" title="重置缩放" style="padding:4px 7px;">↺</button>
+    </div>
+    <button class="btn btn-primary" id="btn-copy" title="选中并复制预览区域内容，可直接粘贴到微信公众号编辑器">
+      📋 复制微信
+    </button>
+    <button class="btn btn-zhihu" id="btn-zhihu" title="复制适合粘贴到知乎编辑器的内容">
+      📝 复制知乎
+    </button>
+    <button class="btn btn-xhs" id="btn-xhs" title="将文章渲染为多张图片导出，适合发布小红书">
+      📸 导出小红书
+    </button>
+    <button class="btn btn-xhs-copy" id="btn-xhs-copy" title="复制适合粘贴到小红书长文编辑器的内容">
+      📱 复制小红书
+    </button>
+    <button class="btn btn-secondary" id="btn-style" title="打开 CSS 样式编辑器">
+      🎨 修改样式
+    </button>
+    <button class="btn btn-upload" id="btn-upload" title="上传到微信公众号草稿箱">
+      ☁️ 上传公众号
+    </button>
+    <button class="btn btn-secondary" id="btn-export" title="导出 HTML 文件">
+      💾 导出 HTML
+    </button>
+  </div>
+
+  <!-- 主内容区 -->
+  <div class="main">
+    <!-- 编辑器（左侧） -->
+    <div class="editor-pane">
+      <textarea id="editor-textarea" placeholder="在此输入 Markdown，或打开一个 .md 文件..." spellcheck="false"></textarea>
+    </div>
+
+    <!-- 预览区（右侧） -->
+    <div class="preview-pane">
+      <div class="preview-scroll">
+        <div class="article-wrapper" id="preview-content">
+          <p style="color:#666;text-align:center;padding:40px 0;">打开一个 Markdown 文件，或直接在左侧编辑器中输入内容</p>
+        </div>
+      </div>
+
+      <!-- 样式编辑面板 -->
+      <div class="side-panel" id="style-panel">
+        <div class="side-panel-header">🎨 自定义样式<button class="panel-close-btn" data-close-panel="style-panel" data-close-state="stylePanelOpen">×</button></div>
+        <div class="side-panel-body">
+          <p class="hint">在此输入 CSS，将作用于预览区域内的文章内容。<br>样式在当前会话内保持，不会影响导出文件。</p>
+          <label>自定义 CSS</label>
+          <textarea id="css-textarea" placeholder="/* 在这里输入自定义 CSS */
+.article-wrapper h1 { color: red; }
+.article-wrapper p { font-size: 18px; }
+"></textarea>
+          <div class="panel-actions">
+            <button class="btn btn-primary" id="btn-apply-css">应用</button>
+            <button class="btn btn-secondary" id="btn-reset-css">重置</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 上传面板 -->
+      <div class="side-panel" id="upload-panel">
+        <div class="side-panel-header">☁️ 上传到微信公众号<button class="panel-close-btn" data-close-panel="upload-panel" data-close-state="uploadPanelOpen">×</button></div>
+        <div class="side-panel-body">
+          <div id="config-section">
+            <p class="hint">
+              需要配置微信公众号开发者信息。<br>
+              前往
+              <a href="#" id="link-weixin">微信公众平台</a>
+              → 设置与开发 → 基本配置 中获取。
+            </p>
+            <label>AppID <span style="color:#f06529">*</span></label>
+            <input type="text" id="input-appid" placeholder="wx开头的AppID">
+            <label>AppSecret <span style="color:#f06529">*</span></label>
+            <input type="password" id="input-appsecret" placeholder="AppSecret">
+            <div class="panel-actions">
+              <button class="btn btn-primary" id="btn-save-config">保存配置</button>
+            </div>
+            <div class="divider"></div>
+          </div>
+
+          <label>文章标题 <span style="color:#f06529">*</span></label>
+          <input type="text" id="input-title" placeholder="文章标题">
+          <label>作者（可选）</label>
+          <input type="text" id="input-author" placeholder="作者名称">
+          <label>文章摘要（可选）</label>
+          <textarea id="input-digest" placeholder="文章摘要，留空则自动截取" style="min-height:60px;"></textarea>
+
+          <div class="hint" style="margin-top:12px;color:#e6a817;border:1px solid #555;padding:8px;border-radius:4px;">
+            ⚠️ 上传功能通过 <a href="#" id="link-fastpen">FastPen</a> 第三方服务实现，您的 AppSecret 将被发送至该服务。请确认您信任该服务后再使用。
+          </div>
+
+          <div class="panel-actions" style="margin-top:14px;">
+            <button class="btn btn-upload" id="btn-do-upload">上传草稿箱</button>
+          </div>
+
+          <div class="upload-result" id="upload-result"></div>
+        </div>
+      </div>
+
+      <!-- 小红书面板 -->
+      <div class="side-panel xhs-panel" id="xhs-panel">
+        <div class="resize-handle" id="xhs-resize-handle"></div>
+        <div class="side-panel-header">📸 导出小红书<button class="panel-close-btn" data-close-panel="xhs-panel" data-close-state="xhsPanelOpen">×</button></div>
+        <div class="side-panel-body">
+          <p class="hint">将文章渲染为多张适合小红书发布的图片。首次使用会自动下载 Chromium（约 150MB），之后无需等待。</p>
+
+          <label>图片宽度（px）</label>
+          <input type="number" id="xhs-width" value="1080" min="600" max="2000">
+
+          <label>每张最大高度（px）</label>
+          <input type="number" id="xhs-height" value="1440" min="400" max="4000">
+
+          <label>四周内边距（px）</label>
+          <input type="number" id="xhs-padding" value="40" min="0" max="200">
+
+          <label>背景色判断容差（0-100）</label>
+          <input type="number" id="xhs-tolerance" value="15" min="0" max="100">
+
+          <div class="panel-actions" style="margin-top:14px;">
+            <button class="btn btn-xhs" id="btn-xhs-python" title="仅生成预览图，不保存到项目目录">📸 生成预览</button>
+            <button class="btn btn-secondary" id="btn-xhs-reset">恢复默认</button>
+          </div>
+          <div class="panel-actions" style="margin-top:8px;">
+            <button class="btn btn-xhs" id="btn-xhs-export-all" title="生成图片并保存到 MD 同名 _xhs 目录（若已生成预览则直接保存）">💾 一键导出全部</button>
+          </div>
+
+          <div id="xhs-output" style="margin-top:14px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 提示 -->
+  <div class="toast" id="toast"></div>
+
+  <!-- 全屏预览 -->
+  <div id="xhs-lightbox">
+    <img id="xhs-lightbox-img" src="" alt="">
+  </div>
+
+  <!-- 自定义样式注入点 -->
+  <style id="custom-style"></style>
+
+  <script>
+    // ─── 全局错误捕获（调试用）───
+    window.onerror = function(msg, url, line, col, err) {
+      const pc = document.getElementById('preview-content');
+      if (pc) pc.innerHTML = '<p style="color:red;padding:20px;">JS Error: ' + msg + '<br>line: ' + line + '<br>' + (err && err.stack ? err.stack : '') + '</p>';
+      console.error('Global error:', msg, err);
+    };
+    window.onunhandledrejection = function(evt) {
+      console.error('Unhandled rejection:', evt.reason);
+    };
+
+    // ─── 状态 ───
+    const eAPI = window.electronAPI;
+    console.log('eAPI available:', !!eAPI);
+    if (!eAPI) {
+      document.getElementById('preview-content').innerHTML = '<p style="color:red;padding:20px;">FATAL: electronAPI not available. Check preload.js.</p>';
+      throw new Error('electronAPI not available');
+    }
+
+    let currentTitle = '';
+    let currentThemeBg = '#ffffff';
+    let currentZoom = 100;
+    let currentFilePath = null;
+    let modified = false;
+    const panelState = { stylePanelOpen: false, uploadPanelOpen: false, xhsPanelOpen: false };
+    const XHS_DEFAULTS = { width: 1080, height: 1440, padding: 40, tolerance: 15 };
+
+    // ─── 工具函数 ───
+    function showToast(msg, type = '', duration = 2500) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast show' + (type ? ' ' + type : '');
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => { el.className = 'toast'; }, duration);
+    }
+
+    function applyTheme(theme) {
+      currentThemeBg = theme.wrapperBg || '#ffffff';
+      let styleEl = document.getElementById('theme-style');
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'theme-style';
+        document.head.appendChild(styleEl);
+      }
+      // 修复：trim 掉选择器前的换行/空格再添加 .article-wrapper 前缀
+      // 同时将逗号分隔的选择器逐个添加前缀
+      var scopedCss = theme.css.replace(/([^}]+)\{/g, function(_m, selector) {
+        var trimmed = selector.trim();
+        if (!trimmed) return _m;
+        return trimmed.split(',').map(function(s) { return '.article-wrapper ' + s.trim(); }).join(', ') + ' {';
+      });
+      styleEl.textContent = '.article-wrapper { background: ' + theme.wrapperBg + '; }\n' + scopedCss;
+      document.querySelector('.preview-scroll').style.background = theme.wrapperBg;
+    }
+
+    // ─── 小红书辅助函数 ───
+    function cssColorToRgb(color) {
+      color = (color || '#ffffff').trim();
+      if (color.startsWith('#')) {
+        const c = color.replace('#', '');
+        const full = c.length === 3 ? c.split('').map(x => x+x).join('') : c;
+        return { r: parseInt(full.slice(0,2),16), g: parseInt(full.slice(2,4),16), b: parseInt(full.slice(4,6),16) };
+      }
+      const m = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+      if (m) return { r: +m[1], g: +m[2], b: +m[3] };
+      return { r: 255, g: 255, b: 255 };
+    }
+
+    function isCleanRow(imageData, relY, width, bgRgb, tol) {
+      const offset = relY * width * 4;
+      for (let x = 0; x < width; x++) {
+        const i = offset + x * 4;
+        if (imageData.data[i+3] < 10) continue;
+        if (Math.abs(imageData.data[i]   - bgRgb.r) > tol ||
+            Math.abs(imageData.data[i+1] - bgRgb.g) > tol ||
+            Math.abs(imageData.data[i+2] - bgRgb.b) > tol) return false;
+      }
+      return true;
+    }
+
+    function smartSlice(canvas, maxSliceH, bgRgb, tol) {
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      const slices = [];
+      let startY = 0;
+      while (startY < H) {
+        let endY = Math.min(startY + maxSliceH, H);
+        if (endY < H) {
+          const minEndY = startY + Math.floor(maxSliceH * 0.5);
+          const chunk = ctx.getImageData(0, startY, W, endY - startY);
+          let cutY = endY;
+          while (cutY > minEndY) {
+            if (isCleanRow(chunk, cutY - startY - 1, W, bgRgb, tol)) { endY = cutY; break; }
+            cutY--;
+          }
+        }
+        const sliceCanvas = document.createElement('canvas');
+        sliceCanvas.width = W; sliceCanvas.height = endY - startY;
+        sliceCanvas.getContext('2d').drawImage(canvas, 0, startY, W, endY - startY, 0, 0, W, endY - startY);
+        slices.push(sliceCanvas.toDataURL('image/png'));
+        startY = endY;
+      }
+      return slices;
+    }
+
+    function showXhsOutput(slices) {
+      const out = document.getElementById('xhs-output');
+      const exportBtn = document.getElementById('btn-xhs-export-all');
+      if (!slices.length) {
+        out.innerHTML = '<p class="hint">未生成任何图片</p>';
+        exportBtn.disabled = true;
+        return;
+      }
+      exportBtn.disabled = false;
+      out.innerHTML = slices.map((url, i) =>
+        `<div class="xhs-img-item">
+          <img src="${url}" alt="第${i+1}张" data-action="zoom" data-url="${url}">
+          <div class="xhs-img-meta">
+            <span>第 ${i+1} / ${slices.length} 张</span>
+            <button data-action="download" data-url="${url}" data-index="${i+1}">⬇ 下载</button>
+          </div>
+        </div>`
+      ).join('');
+    }
+
+    // XHS 事件委托
+    document.getElementById('xhs-output').addEventListener('click', function(e) {
+      const target = e.target;
+      if (target.dataset.action === 'zoom') {
+        zoomImg(target.dataset.url);
+      } else if (target.dataset.action === 'download') {
+        downloadImg(target.dataset.url, parseInt(target.dataset.index));
+      }
+    });
+
+    document.getElementById('xhs-lightbox').addEventListener('click', function() {
+      this.classList.remove('show');
+    });
+
+    function zoomImg(url) {
+      document.getElementById('xhs-lightbox-img').src = url;
+      document.getElementById('xhs-lightbox').classList.add('show');
+    }
+
+    function downloadImg(dataUrl, index) {
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `xiaohongshu-${String(index).padStart(2,'0')}.png`;
+      a.click();
+    }
+
+    // ─── XHS 面板拖拽调宽 ───
+    (function initResize() {
+      const handle = document.getElementById('xhs-resize-handle');
+      const panel  = document.getElementById('xhs-panel');
+      if (!handle || !panel) return;
+      const XHS_DEFAULT_W = 480;
+      const XHS_MIN_W = 340;
+      let startX, startW;
+      function getMaxW() {
+        return Math.max(XHS_MIN_W, (panel.parentElement ? panel.parentElement.offsetWidth : window.innerWidth) - 220);
+      }
+      handle.addEventListener('mousedown', function(e) {
+        startX = e.clientX; startW = panel.offsetWidth;
+        e.preventDefault();
+        function onMove(ev) {
+          const w = Math.min(getMaxW(), Math.max(XHS_MIN_W, startW - (ev.clientX - startX)));
+          panel.style.width = w + 'px';
+        }
+        function onUp() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+      handle.addEventListener('dblclick', function() {
+        panel.style.width = XHS_DEFAULT_W + 'px';
+      });
+    })();
+
+    function closePanel(panelId, stateKey) {
+      panelState[stateKey] = false;
+      const el = document.getElementById(panelId);
+      if (el) {
+        el.classList.remove('open');
+        el.style.width = '';
+      }
+      updateBtnActive();
+    }
+
+    function togglePanel(panelId, stateKey, closeOtherIds) {
+      const panel  = document.getElementById(panelId);
+      const newVal = !panelState[stateKey];
+      panelState[stateKey] = newVal;
+      panel.classList.toggle('open', newVal);
+      if (!newVal) panel.style.width = '';
+      (closeOtherIds || []).forEach(id => {
+        const other = document.getElementById(id.panelId);
+        panelState[id.stateKey] = false;
+        if (other) { other.classList.remove('open'); other.style.width = ''; }
+      });
+      updateBtnActive();
+    }
+
+    function updateBtnActive() {
+      document.getElementById('btn-style').className =
+        'btn ' + (panelState.stylePanelOpen ? 'btn-active' : 'btn-secondary');
+      document.getElementById('btn-upload').className =
+        'btn ' + (panelState.uploadPanelOpen ? 'btn-active' : 'btn-upload');
+      document.getElementById('btn-xhs').className =
+        'btn ' + (panelState.xhsPanelOpen ? 'btn-active' : 'btn-xhs');
+    }
+
+    // 面板关闭按钮（事件委托）
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('.panel-close-btn');
+      if (!btn) return;
+      const panelId  = btn.dataset.closePanel;
+      const stateKey = btn.dataset.closeState;
+      if (panelId && stateKey) closePanel(panelId, stateKey);
+    });
+
+    // ─── 编辑器：输入时触发预览更新（500ms 防抖）───
+    let renderTimer;
+    const editorTextarea = document.getElementById('editor-textarea');
+    editorTextarea.addEventListener('input', () => {
+      modified = true;
+      updateDocTitle();
+      clearTimeout(renderTimer);
+      renderTimer = setTimeout(() => {
+        const content = editorTextarea.value;
+        if (content.trim()) {
+          eAPI.send('editorContentChanged', content);
+        }
+      }, 500);
+    });
+
+    function updateDocTitle() {
+      const titleEl = document.getElementById('doc-title');
+      let name = currentFilePath ? currentFilePath.split(/[\\/]/).pop() : '未命名.md';
+      titleEl.textContent = (modified ? '● ' : '') + name;
+    }
+
+    // ─── 文件操作 ───
+    async function openFile() {
+      const result = await eAPI.invoke('dialog:openFile');
+      if (!result) return;
+      editorTextarea.value = result.content;
+      currentFilePath = result.filePath;
+      modified = false;
+      updateDocTitle();
+    }
+
+    async function saveFile() {
+      if (!currentFilePath) {
+        const result = await eAPI.invoke('dialog:saveFileAs', editorTextarea.value);
+        if (!result) return false;
+        currentFilePath = result.filePath;
+        modified = false;
+        updateDocTitle();
+        showToast('已保存', 'success', 1500);
+        return true;
+      }
+      // save to current file
+      eAPI.send('saveFile', editorTextarea.value);
+      modified = false;
+      updateDocTitle();
+      showToast('已保存', 'success', 1500);
+      return true;
+    }
+
+    async function newFile() {
+      eAPI.send('newFile');
+      editorTextarea.value = '';
+      currentFilePath = null;
+      modified = false;
+      document.getElementById('doc-title').textContent = 'QMD2Any';
+    }
+
+    document.getElementById('btn-open').addEventListener('click', openFile);
+    document.getElementById('btn-save').addEventListener('click', saveFile);
+    document.getElementById('btn-new').addEventListener('click', newFile);
+
+    // 链接
+    document.getElementById('link-weixin').addEventListener('click', (e) => {
+      e.preventDefault();
+      eAPI.send('openExternal', 'https://mp.weixin.qq.com/');
+    });
+    document.getElementById('link-fastpen').addEventListener('click', (e) => {
+      e.preventDefault();
+      eAPI.send('openExternal', 'https://www.fastpen.online');
+    });
+
+    // ─── 主题切换 ───
+    document.getElementById('theme-select').addEventListener('change', (e) => {
+      eAPI.send('setTheme', { themeId: e.target.value });
+    });
+
+    // ─── 复制微信 ───
+    document.getElementById('btn-copy').addEventListener('click', () => {
+      const btn = document.getElementById('btn-copy');
+      btn.disabled = true;
+      btn.textContent = '⏳ 处理中...';
+      eAPI.send('getWechatHtml');
+    });
+
+    // ─── 样式面板 ───
+    document.getElementById('btn-style').addEventListener('click', () => {
+      togglePanel('style-panel', 'stylePanelOpen',
+        [{panelId:'upload-panel',stateKey:'uploadPanelOpen'},{panelId:'xhs-panel',stateKey:'xhsPanelOpen'}]);
+    });
+
+    // ─── 上传面板 ───
+    document.getElementById('btn-upload').addEventListener('click', () => {
+      togglePanel('upload-panel', 'uploadPanelOpen',
+        [{panelId:'style-panel',stateKey:'stylePanelOpen'},{panelId:'xhs-panel',stateKey:'xhsPanelOpen'}]);
+      if (panelState.uploadPanelOpen) {
+        const titleInput = document.getElementById('input-title');
+        if (!titleInput.value && currentTitle) titleInput.value = currentTitle;
+        eAPI.send('getConfig');
+      }
+    });
+
+    // ─── XHS 面板 ───
+    document.getElementById('btn-xhs').addEventListener('click', () => {
+      togglePanel('xhs-panel', 'xhsPanelOpen',
+        [{panelId:'style-panel',stateKey:'stylePanelOpen'},{panelId:'upload-panel',stateKey:'uploadPanelOpen'}]);
+    });
+
+    // XHS 生成预览 (via Playwright)
+    document.getElementById('btn-xhs-python').addEventListener('click', () => {
+      const imgW   = parseInt(document.getElementById('xhs-width').value)     || XHS_DEFAULTS.width;
+      const imgH   = parseInt(document.getElementById('xhs-height').value)    || XHS_DEFAULTS.height;
+      const pad    = parseInt(document.getElementById('xhs-padding').value) || XHS_DEFAULTS.padding;
+      const bgColor = currentThemeBg || '#ffffff';
+      const btn = document.getElementById('btn-xhs-python');
+      btn.disabled = true; btn.textContent = '⏳ 渲染中...';
+      document.getElementById('xhs-output').innerHTML = '<p class="hint">⏳ 正在生成，请稍候...</p>';
+      eAPI.send('generateXhsViaPython', { width: imgW, height: imgH, padding: pad, bg: bgColor, autoExport: false });
+    });
+
+    // XHS 恢复默认
+    document.getElementById('btn-xhs-reset').addEventListener('click', () => {
+      document.getElementById('xhs-width').value     = XHS_DEFAULTS.width;
+      document.getElementById('xhs-height').value    = XHS_DEFAULTS.height;
+      document.getElementById('xhs-padding').value   = XHS_DEFAULTS.padding;
+      document.getElementById('xhs-tolerance').value = XHS_DEFAULTS.tolerance;
+      showToast('已恢复默认参数');
+    });
+
+    // XHS 一键导出
+    document.getElementById('btn-xhs-export-all').addEventListener('click', () => {
+      const slices = window._xhsLastSlices;
+      const btn = document.getElementById('btn-xhs-export-all');
+      if (slices && slices.length) {
+        btn.disabled = true; btn.textContent = '💾 导出中...';
+        eAPI.send('saveXhsImages', { dataUrls: slices });
+      } else {
+        const imgW   = parseInt(document.getElementById('xhs-width').value)     || XHS_DEFAULTS.width;
+        const imgH   = parseInt(document.getElementById('xhs-height').value)    || XHS_DEFAULTS.height;
+        const pad    = parseInt(document.getElementById('xhs-padding').value) || XHS_DEFAULTS.padding;
+        const bgColor = currentThemeBg || '#ffffff';
+        btn.disabled = true; btn.textContent = '⏳ 生成并导出中...';
+        document.getElementById('btn-xhs-python').disabled = true;
+        document.getElementById('btn-xhs-python').textContent = '⏳ 渲染中...';
+        document.getElementById('xhs-output').innerHTML = '<p class="hint">⏳ 正在生成，请稍候...</p>';
+        eAPI.send('generateXhsViaPython', { width: imgW, height: imgH, padding: pad, bg: bgColor, autoExport: true });
+      }
+    });
+
+    // ─── 知乎复制 ───
+    document.getElementById('btn-zhihu').addEventListener('click', () => {
+      const btn = document.getElementById('btn-zhihu');
+      btn.disabled = true; btn.textContent = '⏳ 处理中...';
+      eAPI.send('getZhihuHtml');
+    });
+
+    // ─── XHS 长文复制 ───
+    document.getElementById('btn-xhs-copy').addEventListener('click', () => {
+      const btn = document.getElementById('btn-xhs-copy');
+      btn.disabled = true; btn.textContent = '⏳ 处理中...';
+      eAPI.send('getXhsCopyHtml');
+    });
+
+    // ─── 导出 HTML ───
+    document.getElementById('btn-export').addEventListener('click', () => {
+      if (!currentFilePath) {
+        showToast('请先保存文件后再导出', 'error');
+        return;
+      }
+      eAPI.send('exportHtml');
+    });
+
+    // ─── 应用 CSS ───
+    document.getElementById('btn-apply-css').addEventListener('click', () => {
+      const css = document.getElementById('css-textarea').value;
+      document.getElementById('custom-style').textContent = css;
+      showToast('样式已应用', 'success');
+    });
+
+    // ─── 重置 CSS ───
+    document.getElementById('btn-reset-css').addEventListener('click', () => {
+      document.getElementById('css-textarea').value = '';
+      document.getElementById('custom-style').textContent = '';
+      showToast('样式已重置');
+    });
+
+    // ─── 保存配置 ───
+    document.getElementById('btn-save-config').addEventListener('click', () => {
+      const appid     = document.getElementById('input-appid').value.trim();
+      const appSecret = document.getElementById('input-appsecret').value.trim();
+      const author    = document.getElementById('input-author').value.trim();
+      const digest    = document.getElementById('input-digest').value.trim();
+      if (!appid || !appSecret) {
+        showToast('AppID 和 AppSecret 不能为空', 'error');
+        return;
+      }
+      eAPI.send('saveConfig', { appid, appSecret, author, digest });
+    });
+
+    // ─── 上传 ───
+    document.getElementById('btn-do-upload').addEventListener('click', () => {
+      const appid     = document.getElementById('input-appid').value.trim();
+      const appSecret = document.getElementById('input-appsecret').value.trim();
+      const title     = document.getElementById('input-title').value.trim();
+      const author    = document.getElementById('input-author').value.trim();
+      const digest    = document.getElementById('input-digest').value.trim();
+
+      if (!appid || !appSecret) {
+        showToast('请先填写并保存 AppID / AppSecret', 'error');
+        return;
+      }
+      if (!title) {
+        showToast('请填写文章标题', 'error');
+        return;
+      }
+
+      eAPI.send('upload', { appid, appSecret, title, author, digest });
+    });
+
+    // ─── 缩放控制 ───
+    function setZoom(zoom) {
+      currentZoom = Math.max(30, Math.min(200, zoom));
+      const el = document.getElementById('preview-content');
+      if (el) el.style.zoom = currentZoom + '%';
+      const zv = document.getElementById('zoom-value');
+      if (zv) zv.textContent = currentZoom + '%';
+    }
+    document.getElementById('btn-zoom-out').addEventListener('click', () => setZoom(currentZoom - 10));
+    document.getElementById('btn-zoom-in').addEventListener('click',  () => setZoom(currentZoom + 10));
+    document.getElementById('btn-zoom-reset').addEventListener('click', () => setZoom(100));
+
+    // Ctrl+滚轮缩放
+    document.querySelector('.preview-scroll').addEventListener('wheel', (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      setZoom(currentZoom + (e.deltaY < 0 ? 10 : -10));
+    }, { passive: false });
+
+    // ─── Todo 复选框交互 ───
+    document.getElementById('preview-content').addEventListener('change', (e) => {
+      if (!e.target.classList.contains('task-checkbox')) return;
+      const all = Array.from(document.querySelectorAll('#preview-content .task-checkbox'));
+      const index = all.indexOf(e.target);
+      if (index >= 0) {
+        eAPI.send('todoToggle', { index, checked: e.target.checked });
+      }
+    });
+
+    // ─── 键盘快捷键 ───
+    document.addEventListener('keydown', (e) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key === 'o') {
+        e.preventDefault();
+        openFile();
+      } else if (mod && e.key === 's') {
+        e.preventDefault();
+        saveFile();
+      } else if (mod && e.key === 'n') {
+        e.preventDefault();
+        newFile();
+      }
+    });
+
+    // ────────────────────────────────────────────────
+    //  接收 Main Process 消息（替代 VS Code postMessage）
+    // ────────────────────────────────────────────────
+
+    eAPI.on('update', (msg) => {
+      const bodyHtml = msg.bodyHtml || '';
+      currentTitle   = msg.title || '';
+      document.getElementById('preview-content').innerHTML = bodyHtml;
+      document.getElementById('doc-title').textContent = (modified ? '● ' : '') + (currentTitle || (currentFilePath ? currentFilePath.split(/[\\/]/).pop() : 'QMD2Any'));
+      if (msg.theme) applyTheme(msg.theme);
+      const titleInput = document.getElementById('input-title');
+      if (!titleInput.value && currentTitle) titleInput.value = currentTitle;
+    });
+
+    eAPI.on('themeList', (msg) => {
+      const sel = document.getElementById('theme-select');
+      sel.innerHTML = '';
+      (msg.themes || []).forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.name;
+        if (t.id === msg.currentId) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    });
+
+    eAPI.on('error', (msg) => {
+      document.getElementById('preview-content').innerHTML =
+        `<p style="color:red;font-family:monospace;">⚠️ 渲染错误：${msg.message}</p>`;
+    });
+
+    eAPI.on('wechatHtml', (msg) => {
+      const btn = document.getElementById('btn-copy');
+      btn.disabled = false;
+      btn.textContent = '📋 复制微信';
+      copyHtmlToClipboard(msg.html || '',
+        '✅ 已复制！直接粘贴到微信公众号编辑器即可',
+        '复制失败，请手动 Ctrl+A 后复制');
+    });
+
+    eAPI.on('wechatHtmlError', (msg) => {
+      const btn = document.getElementById('btn-copy');
+      btn.disabled = false;
+      btn.textContent = '📋 复制微信';
+      showToast('复制失败：' + (msg.message || '未知错误'), 'error');
+    });
+
+    eAPI.on('zhihuHtml', (msg) => {
+      const btn = document.getElementById('btn-zhihu');
+      btn.disabled = false; btn.textContent = '📝 复制知乎';
+      copyHtmlToClipboard(msg.html || '',
+        '✅ 已复制！粘贴到知乎编辑器即可',
+        '复制失败，请手动选择复制');
+    });
+
+    eAPI.on('zhihuHtmlError', (msg) => {
+      const btn = document.getElementById('btn-zhihu');
+      btn.disabled = false; btn.textContent = '📝 复制知乎';
+      showToast('复制失败：' + (msg.message || '未知错误'), 'error');
+    });
+
+    eAPI.on('xhsCopyHtml', (msg) => {
+      const btn = document.getElementById('btn-xhs-copy');
+      btn.disabled = false; btn.textContent = '📱 复制小红书';
+      copyHtmlToClipboard(msg.html || '',
+        '✅ 已复制！粘贴到小红书长文编辑器即可（图片需手动上传）',
+        '复制失败，请手动选择复制', 4000);
+    });
+
+    eAPI.on('xhsCopyHtmlError', (msg) => {
+      const btn = document.getElementById('btn-xhs-copy');
+      btn.disabled = false; btn.textContent = '📱 复制小红书';
+      showToast('复制失败：' + (msg.message || '未知错误'), 'error');
+    });
+
+    function copyHtmlToClipboard(html, successMsg, errorMsg, duration = 2500) {
+      if (navigator.clipboard && window.ClipboardItem) {
+        navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html':  new Blob([html], { type: 'text/html' }),
+            'text/plain': new Blob([(document.getElementById('preview-content').innerText || '')], { type: 'text/plain' }),
+          }),
+        ]).then(() => {
+          showToast(successMsg, 'success', duration);
+        }).catch(() => {
+          fallbackCopy();
+        });
+      } else {
+        fallbackCopy();
+      }
+      function fallbackCopy() {
+        const tmp = document.createElement('div');
+        tmp.style.cssText = 'position:fixed;left:-9999px;top:0;';
+        tmp.innerHTML = html;
+        document.body.appendChild(tmp);
+        const range = document.createRange();
+        range.selectNodeContents(tmp);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        try { document.execCommand('copy'); showToast(successMsg, 'success', duration); }
+        catch (_) { showToast(errorMsg, 'error'); }
+        sel.removeAllRanges();
+        document.body.removeChild(tmp);
+      }
+    }
+
+    eAPI.on('xhsPythonProgress', (msg) => {
+      document.getElementById('xhs-output').innerHTML = `<p class="hint">${msg.message}</p>`;
+    });
+
+    eAPI.on('xhsPythonDone', (msg) => {
+      const btn = document.getElementById('btn-xhs-python');
+      btn.disabled = false; btn.textContent = '📸 生成预览';
+      window._xhsLastSlices = msg.dataUrls;
+      showXhsOutput(msg.dataUrls);
+      document.getElementById('btn-xhs-export-all').disabled = false;
+      if (msg.autoExport) {
+        document.getElementById('btn-xhs-export-all').disabled = true;
+        document.getElementById('btn-xhs-export-all').textContent = '💾 导出中...';
+        eAPI.send('saveXhsImages', { dataUrls: msg.dataUrls });
+      } else {
+        showToast(`✅ 生成 ${msg.dataUrls.length} 张预览图，点击「一键导出全部」保存到本地`, 'success', 5000);
+      }
+    });
+
+    eAPI.on('xhsPythonError', (msg) => {
+      const btn = document.getElementById('btn-xhs-python');
+      btn.disabled = false; btn.textContent = '📸 生成预览';
+      document.getElementById('btn-xhs-export-all').disabled = false;
+      document.getElementById('btn-xhs-export-all').textContent = '💾 一键导出全部';
+      const errMsg = msg.message || '未知错误';
+      document.getElementById('xhs-output').innerHTML =
+        `<p class="hint" style="color:#f88">❌ ${errMsg}</p>`;
+      showToast('生成失败: ' + errMsg, 'error');
+    });
+
+    eAPI.on('saveXhsImagesDone', (msg) => {
+      const btn = document.getElementById('btn-xhs-export-all');
+      btn.disabled = false; btn.textContent = '💾 一键导出全部';
+      document.getElementById('btn-xhs-python').disabled = false;
+      showToast(`✅ 已导出 ${msg.count} 张到本地`, 'success', 4000);
+    });
+
+    eAPI.on('saveXhsImagesError', (msg) => {
+      const btn = document.getElementById('btn-xhs-export-all');
+      btn.disabled = false; btn.textContent = '💾 一键导出全部';
+      document.getElementById('btn-xhs-python').disabled = false;
+      showToast('导出失败：' + (msg.message || '未知错误'), 'error');
+    });
+
+    eAPI.on('config', (msg) => {
+      if (msg.appid)     document.getElementById('input-appid').value     = msg.appid;
+      if (msg.appSecret) document.getElementById('input-appsecret').value = msg.appSecret;
+      if (msg.author)    document.getElementById('input-author').value    = msg.author;
+      if (msg.digest)    document.getElementById('input-digest').value    = msg.digest;
+    });
+
+    eAPI.on('configSaved', () => {
+      showToast('✅ 配置已保存', 'success');
+    });
+
+    eAPI.on('uploadStart', () => {
+      const btn = document.getElementById('btn-do-upload');
+      btn.textContent = '上传中...';
+      btn.disabled = true;
+      const res = document.getElementById('upload-result');
+      res.style.display = 'none';
+    });
+
+    eAPI.on('uploadResult', (msg) => {
+      const btn = document.getElementById('btn-do-upload');
+      btn.textContent = '上传草稿箱';
+      btn.disabled = false;
+      const res = document.getElementById('upload-result');
+      if (msg.success) {
+        res.className = 'upload-result success';
+        res.textContent = `✅ 上传成功！media_id: ${msg.mediaId || '—'}`;
+        showToast('上传成功！', 'success');
+      } else {
+        res.className = 'upload-result error';
+        res.textContent = `❌ 上传失败：${msg.error || '未知错误'}`;
+        showToast('上传失败，请查看详情', 'error');
+      }
+      res.style.display = 'block';
+    });
+
+    // ─── 初始化 ───
+    eAPI.send('ready');
+  </script>
+</body>
+</html>
