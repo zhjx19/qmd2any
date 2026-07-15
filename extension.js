@@ -437,37 +437,7 @@ async function handleWebviewMessage(msg, panel, mdPath) {
           break;
         }
 
-        // 检查登录状态，未登录则自动登录
-        let cookies = zhihuBrowserCookies();
-        if (!cookies.length) {
-          panel.webview.postMessage({ type: 'zhihuPublishProgress', message: '未登录，正在打开登录窗口...' });
-          log('知乎发布：未登录，自动触发登录');
-          try {
-            const loginResult = await social.login('zhihu', {
-              extensionPath: extContext.extensionUri.fsPath,
-              storage: extContext.globalState,
-              onProgress: (m) => panel.webview.postMessage({ type: 'zhihuPublishProgress', message: m }),
-              onChild: (c) => { lastChild.zhihu = c; },
-            });
-            // 登录成功后保存 cookie 并重新读取
-            const oldCookieStr = loginResult.cookies.map(c => `${c.name}=${c.value}`).join('; ');
-            await extContext.globalState.update(zhihu.STORAGE_KEY, oldCookieStr);
-            cookies = zhihuBrowserCookies();
-            if (!cookies.length) {
-              panel.webview.postMessage({ type: 'zhihuPublishResult', success: false, error: '登录未完成，请重试' });
-              break;
-            }
-            panel.webview.postMessage({ type: 'zhihuPublishProgress', message: '登录成功，开始发布...' });
-          } catch (loginErr) {
-            if (loginErr.needInstall) {
-              panel.webview.postMessage({ type: 'zhihuPublishResult', success: false, error: '未找到 Chromium，请先使用 Playwright 相关功能触发自动安装' });
-            } else {
-              panel.webview.postMessage({ type: 'zhihuPublishResult', success: false, error: '自动登录失败：' + loginErr.message });
-            }
-            break;
-          }
-        }
-
+        // 准备发布内容
         const cfg = vscode.workspace.getConfiguration('qmd2any');
         const cleanHtml = zhihu.buildPublishHtml(bodyHtml);
         const imageMdPath = isQuartoFile(mdPath)
@@ -475,6 +445,47 @@ async function handleWebviewMessage(msg, panel, mdPath) {
           : mdPath;
         const localImages = listMarkdownLocalImages(imageMdPath);
 
+        let cookies = zhihuBrowserCookies();
+
+        if (!cookies.length) {
+          // ── 未登录：login+publish 合并在同一进程、同一浏览器完成 ──
+          // 消除跨进程 CDP 重连和 cookie 注入的问题。
+          panel.webview.postMessage({ type: 'zhihuPublishProgress', message: '未登录，正在打开登录窗口...' });
+          log(`知乎发布（含自动登录）: 正文 ${cleanHtml.length} 字节，本地图 ${localImages.length} 张`);
+
+          killWorker('zhihu');
+          const result = await social.loginAndPublish('zhihu', {
+            extensionPath: extContext.extensionUri.fsPath,
+            storage: extContext.globalState,
+            content: { title: title.trim(), html: cleanHtml },
+            images: localImages,
+            mode: cfg.get('publish.mode', 'prepare'),
+            headless: false,
+            onChild: (c) => { lastChild.zhihu = c; },
+            onLoginProgress: (m) => panel.webview.postMessage({ type: 'zhihuPublishProgress', message: m }),
+            onPublishProgress: (m) => panel.webview.postMessage({ type: 'zhihuPublishProgress', message: m }),
+            onStep: (s) => panel.webview.postMessage({ type: 'zhihuPublishProgress', message: `[${s.done}/${s.total}] ${s.label}` }),
+          });
+
+          // 同步到旧格式 cookie 字符串（兼容 zhihu.isLoggedIn 检查）
+          try {
+            const arr = JSON.parse(extContext.globalState.get('zhihu.browserCookies') || '[]');
+            if (arr.length) {
+              await extContext.globalState.update(zhihu.STORAGE_KEY, arr.map(c => `${c.name}=${c.value}`).join('; '));
+            }
+          } catch (_) {}
+
+          log(`知乎发布完成: ${result.status}`);
+          panel.webview.postMessage({
+            type: 'zhihuPublishResult', success: true, browser: true,
+            message: result.status === 'ready'
+              ? '✅ 标题、正文、图片都已填好，请在浏览器里核对后自己点「发布」'
+              : '✅ 已提交发布，请在浏览器确认',
+          });
+          break;
+        }
+
+        // ── 已登录：直接发布 ──
         panel.webview.postMessage({ type: 'zhihuPublishStart' });
         log(`知乎发布: 正文 ${cleanHtml.length} 字节，本地图 ${localImages.length} 张（来源: ${path.basename(imageMdPath)}）`);
 
@@ -1713,6 +1724,25 @@ function killWorker(platform) {
 }
 
 function zhihuBrowserCookies() {
+  // 优先使用 social.login() 写入的完整 cookie 对象
+  // 关键：domain 必须强制为 .zhihu.com，因为登录在 www.zhihu.com 而发布在 zhuanlan.zhihu.com，
+  // 浏览器返回的 cookie domain 可能是 www.zhihu.com（精确匹配），不会发送到其他子域。
+  try {
+    const rich = JSON.parse(extContext.globalState.get('zhihu.browserCookies') || '[]');
+    if (Array.isArray(rich) && rich.length && rich.some(c => c.name === 'z_c0' && c.value)) {
+      return rich.map(c => ({
+        name: c.name, value: c.value,
+        domain: '.zhihu.com',  // 强制跨子域，不保留原始 domain
+        path: c.path || '/',
+        expires: typeof c.expires === 'number' ? c.expires : -1,
+        httpOnly: !!c.httpOnly,
+        secure: c.secure !== false,
+        sameSite: c.sameSite || 'Lax',
+      })).filter(c => c.name && c.value);
+    }
+  } catch (_) { /* fall through to legacy format */ }
+
+  // 兼容旧格式：手动粘贴或旧版保存的 "name=value; name2=value2" 字符串
   const str = extContext.globalState.get(zhihu.STORAGE_KEY, '') || '';
   return str.split(/;\s*/).map(p => {
     const i = p.indexOf('=');

@@ -208,9 +208,68 @@ async function doLogin(cookieOutFile) {
     await dumpDiag(page, 'login_timeout');
     fail('登录超时（5 分钟内未检测到登录态）');
   } finally {
-    // 只关我们自己开的窗口；复用来的（用户正在用的发布窗口）不能关
-    if (_ownsBrowser) await browser.close().catch(() => {});
+    // 登录完成后【不关闭浏览器】—— 后续 publish 会通过 CDP 重连同一个浏览器，
+    // 这样 cookie 天然就在上下文里，无需注入到新浏览器（跨浏览器注入是登录失效的根因）。
+    // 浏览器由 publish 进程接管，最终由用户手动关闭。
   }
+}
+
+// ─── login + publish（同一进程，同一浏览器）────────────────────────────────
+/**
+ * 登录完成后立即在同一浏览器里发布 —— 消除跨进程 CDP 重连和 cookie 注入，
+ * 从根本上解决 Windows 上 CDP 复用不可靠导致的 "卡在登录页/发布中" 问题。
+ */
+async function doLoginAndPublish(cookieOutFile, jobFile) {
+  const def = PLATFORMS[platform];
+  if (!def) fail('未知平台：' + platform);
+
+  const job = JSON.parse(fs.readFileSync(jobFile, 'utf8'));
+  const { browser, context } = await getBrowser(false);
+  const page = await getPage(context);
+  await page.goto(def.loginUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  info(`已打开 ${def.name} 登录页，请在浏览器里完成登录…`);
+
+  const deadline = Date.now() + 5 * 60 * 1000;
+  let lastSeen = '';
+  while (Date.now() < deadline) {
+    if (page.isClosed()) { fail('登录窗口被关闭'); return; }
+
+    const cookies = await context.cookies().catch(() => []);
+    const hits = cookies.filter(c => def.authCookies.includes(c.name) && c.value && c.value.length > 5);
+    let url = '';
+    try { url = page.url(); } catch (_) {}
+    const leftLogin = url && !def.loginUrlPattern.test(url);
+
+    const seen = hits.map(c => c.name).join(',');
+    if (seen && seen !== lastSeen) { info('检测到登录 cookie：' + seen); lastSeen = seen; }
+
+    if (hits.length && leftLogin) {
+      await page.waitForTimeout(2500);
+      const all = await context.cookies();
+      fs.writeFileSync(cookieOutFile, JSON.stringify(all), 'utf8');
+      info(`登录成功，已保存 ${all.length} 条 cookie`);
+      out('COOKIES_SAVED');
+
+      // ── 在同一浏览器里开新标签页做发布 ──
+      info('登录完成，正在打开发布页…');
+      const pubPage = await context.newPage();
+
+      if (platform === 'zhihu') {
+        await publishZhihu(pubPage, def, { title: job.title, html: job.html || '', images: job.images || [], mode: job.mode || 'prepare' });
+      } else if (platform === 'xiaohongshu') {
+        await publishXiaohongshu(pubPage, def, { title: job.title, body: job.body || '', tags: job.tags || [], images: job.images || [], mode: job.mode || 'prepare' });
+      } else if (platform === 'twitter') {
+        const list = (job.tweets && job.tweets.length) ? job.tweets : [{ body: job.body || '', tags: job.tags || [] }];
+        await publishTwitter(pubPage, def, { tweets: list, link: job.link || '', images: job.images || [], mode: job.mode || 'prepare', autoNumber: job.autoNumber !== false, linkPos: job.linkPos || 'all', oneImagePerTweet: job.oneImagePerTweet !== false });
+      }
+
+      // publish 函数内部会挂住进程，不会走到这里
+      return;
+    }
+    await page.waitForTimeout(1500);
+  }
+  await dumpDiag(page, 'login_timeout');
+  fail('登录超时（5 分钟内未检测到登录态）');
 }
 
 // ─── publish ────────────────────────────────────────────────────────────────
@@ -228,13 +287,29 @@ async function doPublish(jobFile, resume) {
   // 复用已开着的窗口（登录时开的那个也会被复用），没有才新开
   const { browser, context, reused } = await getBrowser(headless);
   // 无论新开还是复用，都注入一次存好的 cookie，保证用的是当前登录态
-  await context.addCookies(normalizeCookies(cookies, def)).catch(() => {});
+  try {
+    await context.addCookies(normalizeCookies(cookies, def));
+    info(`已注入 ${cookies.length} 条 cookie`);
+  } catch (e) {
+    info(`⚠️ Cookie 注入失败：${e.message}`);
+    // 不中断流程：可能是部分 cookie 格式问题，剩余的有效 cookie 已在上下文中
+  }
   if (resume && reused) info('已重连到原窗口，从断点继续…');
 
   let leaveOpen = false;
   let page;
   try {
     page = await getPage(context);
+
+    // 知乎：如果复用了登录时开的浏览器，当前页面是 www.zhihu.com（登录后的跳转页）。
+    // 这个页面可能处于过渡状态，直接 goto 到 write 页会卡住。开一个干净的新标签页，
+    // cookie 由 context 共享，无需注入。
+    if (platform === 'zhihu' && reused) {
+      const newPage = await context.newPage();
+      info('已打开新标签页用于发布（复用登录会话）');
+      await page.close().catch(() => {});
+      page = newPage;
+    }
 
     if (platform === 'twitter') {
       // 单条也走串推逻辑（N=1 时不加编号）
@@ -273,7 +348,10 @@ async function doPublish(jobFile, resume) {
 function normalizeCookies(cookies, def) {
   return (cookies || []).map(c => ({
     name: c.name, value: c.value,
-    domain: c.domain, path: c.path || '/',
+    // 知乎的 cookie domain 必须强制为 .zhihu.com —— 登录在 www.zhihu.com，
+    // 发布在 zhuanlan.zhihu.com，浏览器返回的原始 domain 可能只匹配当前子域。
+    domain: (platform === 'zhihu') ? '.zhihu.com' : c.domain,
+    path: c.path || '/',
     expires: typeof c.expires === 'number' ? c.expires : -1,
     httpOnly: !!c.httpOnly, secure: c.secure !== false, sameSite: c.sameSite || 'Lax',
   })).filter(c => c.name && c.value && c.domain);
@@ -879,6 +957,7 @@ function composeText(body, tags, link, limit, hashInline, weighted) {
 (async () => {
   try {
     if (cmd === 'login')        await doLogin(argv[2]);
+    else if (cmd === 'login-publish') await doLoginAndPublish(argv[2], argv[3]);
     else if (cmd === 'publish') await doPublish(argv[2], false);
     else if (cmd === 'resume')  await doPublish(argv[2], true);
     else fail('未知子命令：' + cmd);
