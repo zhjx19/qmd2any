@@ -103,10 +103,10 @@ npm install -g @vscode/vsce
 vsce package
 
 # 安装到 Positron
-positron --install-extension qmd2any-2.1.0.vsix
+positron --install-extension qmd2any-2.1.1.vsix
 
 # 或安装到 VS Code
-code --install-extension qmd2any-2.1.0.vsix
+code --install-extension qmd2any-2.1.1.vsix
 ```
 
 ---
@@ -253,6 +253,12 @@ social.publish() → Playwright 浏览器自动化
 ---
 
 ## 版本历史
+
+### v2.1.1
+
+- **修复**：知乎首次登录后发布失败 — 登录和发布合并为同一进程、同一浏览器，消除跨进程 cookie 注入失败
+- **修复**：换文件后需要重新知乎登录 — `setCookies` 改用 VS Code Memento `update()` API（原来用了不存在的 `set()`）
+- **修复**：知乎 cookie 子域问题 — 强制 `domain: .zhihu.com` 确保 `www.zhihu.com` 登录的 cookie 在 `zhuanlan.zhihu.com` 发布时生效
 
 ### v2.1.0
 
