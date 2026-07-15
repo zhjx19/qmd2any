@@ -1,5 +1,8 @@
 # QMD2Any — Quarto / Markdown 一键导出微信 & 知乎
 
+[![VS Code Marketplace](https://img.shields.io/badge/VS%20Code-Install-2d7a3e?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=ZhangJingxin.qmd2any)
+[![GitHub Release](https://img.shields.io/github/v/release/zhjx19/qmd2any?logo=github&label=Release)](https://github.com/zhjx19/qmd2any/releases/latest)
+
 > 🔌 Forked from [markdown2anything](https://github.com/marsggbo/markdown2anything) v3.0（by [@marsggbo](https://github.com/marsggbo)）
 > — 在原有 Markdown → 微信/知乎/小红书 管线的基础上，新增 **Quarto (.qmd) 一键编译发布**支持。
 
@@ -65,7 +68,25 @@
 
 ## 安装
 
-### 方式一：从源码安装（开发模式）
+### 方式一：从 VS Code Marketplace 安装（推荐）
+
+在 VS Code 扩展市场搜索 **QMD2Any** 安装，或点击：
+
+[![Install](https://img.shields.io/badge/VS%20Code-Install-2d7a3e?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=ZhangJingxin.qmd2any)
+
+### 方式二：下载 VSIX 包手动安装
+
+从 [GitHub Releases](https://github.com/zhjx19/qmd2any/releases/latest) 下载最新 `.vsix` 文件：
+
+```bash
+# 安装到 VS Code
+code --install-extension qmd2any-*.vsix
+
+# 或安装到 Positron
+positron --install-extension qmd2any-*.vsix
+```
+
+### 方式三：从源码安装（开发模式）
 
 ```bash
 git clone https://github.com/<your-username>/qmd2any.git
