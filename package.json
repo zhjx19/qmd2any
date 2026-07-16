@@ -2,7 +2,7 @@
   "name": "qmd2any",
   "displayName": "QMD2Any - Quarto 一键导出微信/知乎",
   "description": "将 Markdown / Quarto (.qmd) / Notebook (.ipynb) 一键导出到微信公众号和知乎，支持 LaTeX 公式、代码高亮、6 套主题、实时预览、Quarto 编译集成",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "publisher": "ZhangJingxin",
   "license": "MIT",
   "icon": "icon.png",
