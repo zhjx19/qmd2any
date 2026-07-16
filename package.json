@@ -44,7 +44,8 @@
   "main": "./extension.js",
   "activationEvents": [
     "onLanguage:markdown",
-    "onLanguage:quarto"
+    "onLanguage:quarto",
+    "onNotebook:jupyter-notebook"
   ],
   "contributes": {
     "commands": [
@@ -68,26 +69,26 @@
       "editor/title": [
         {
           "command": "qmd2any.preview",
-          "when": "resourceLangId == markdown || resourceLangId == quarto",
+          "when": "resourceLangId == markdown || resourceLangId == quarto || notebookType == jupyter-notebook",
           "group": "navigation"
         }
       ],
       "explorer/context": [
         {
           "command": "qmd2any.preview",
-          "when": "resourceExtname == .md || resourceExtname == .qmd",
+          "when": "resourceExtname == .md || resourceExtname == .qmd || resourceExtname == .ipynb",
           "group": "1_modification"
         },
         {
           "command": "qmd2any.convert",
-          "when": "resourceExtname == .md || resourceExtname == .qmd",
+          "when": "resourceExtname == .md || resourceExtname == .qmd || resourceExtname == .ipynb",
           "group": "1_modification"
         }
       ],
       "editor/context": [
         {
           "command": "qmd2any.preview",
-          "when": "resourceLangId == markdown || resourceLangId == quarto",
+          "when": "resourceLangId == markdown || resourceLangId == quarto || notebookType == jupyter-notebook",
           "group": "1_modification"
         }
       ]
@@ -97,7 +98,7 @@
         "command": "qmd2any.preview",
         "key": "ctrl+shift+w",
         "mac": "cmd+shift+w",
-        "when": "resourceLangId == markdown || resourceLangId == quarto"
+        "when": "resourceLangId == markdown || resourceLangId == quarto || notebookType == jupyter-notebook"
       }
     ],
     "configuration": {
