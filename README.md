@@ -230,6 +230,10 @@ social.publish() → Playwright 浏览器自动化
 
 ## 版本历史
 
+### v2.2.1
+
+- **修复**：知乎发布块公式未居中 — 给块公式 `<p>` 容器补上 `text-align: center`
+
 ### v2.2.0
 
 - **新增**：Jupyter Notebook (.ipynb) 支持 — 编译、预览、复制微信、发布知乎全部可用
