@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |---------|-------------|
 | `npm install` | Install dependencies |
 | `npm run package` | Build `.vsix` extension package |
+| `npm run install-ext` | Build `.vsix` and install it locally (`code --install-extension`) |
 | `npm run start:electron` | Launch Electron desktop app in dev mode |
 | `npm run build:mac` | Package macOS `.dmg` (x64) |
 | `npm run build:mac:universal` | Package macOS `.dmg` (Intel + Apple Silicon) |
@@ -36,13 +37,15 @@ gray-matter (frontmatter parsing)
 |------|------|
 | [extension.js](extension.js) | VS Code extension entry point. Registers `qmd2any.preview` and `qmd2any.convert` commands. Manages Webview panels with a message-passing architecture (`postMessage`). Spawns child Node processes for Playwright screenshot/login scripts. |
 | [lib/converter.js](lib/converter.js) | **Core shared library.** Exports `renderMarkdown`, `buildWechatCopyHtml`, `buildZhihuCopyHtml`, `buildXhsCopyHtml`, `buildXhsRenderHtml`, `convertMarkdownToWeChat`. Handles KaTeX font base64 inlining, `&nbsp;`/`<br>` preservation through juice, and platform-specific HTML normalization. |
-| [lib/themes.js](lib/themes.js) | Exports `THEMES` array, `DEFAULT_THEME_ID`, `getTheme()`. 10 built-in themes, each with a CSS string and `wrapperBg` color. |
-| [lib/zhihu.js](lib/zhihu.js) | Zhihu publishing module. Login verification, two-phase image upload (md5 pre-check → ali-oss upload), article create/update/save-draft. Uses raw `https` module (no axios/fetch). |
+| [lib/themes.js](lib/themes.js) | Exports `THEMES` array, `DEFAULT_THEME_ID`, `getTheme()`. 6 built-in themes (wechat/claude/macos/zhihu/monochrome/notion), each with a CSS string and `wrapperBg` color. |
+| [lib/zhihu.js](lib/zhihu.js) | Zhihu HTTP API module (legacy image upload path). Login verification, two-phase image upload (md5 pre-check → ali-oss upload), article create/update/save-draft. Uses raw `https` module (no axios/fetch). The browser-based publishing path in `social.js` + `social_worker.js` is now the primary flow. |
+| [lib/social.js](lib/social.js) | Playwright browser automation scheduler (host side). Cookie management via VS Code `globalState` (never touches disk). Spawns `social_worker.js` as a child process, parses its stdout protocol. Exports `login`, `publish`, `resume`, `loginAndPublish` for 知乎/小红书/Twitter. |
+| [lib/quarto.js](lib/quarto.js) | Quarto `.qmd` compilation. Spawns `quarto render --to gfm`, extracts YAML frontmatter, manages cross-session compile cache (skips re-compile when `.qmd` hasn't changed). Single-file only — no book project support. |
 | [electron/main.js](electron/main.js) | Electron main process. File open/save dialogs, IPC handlers for rendering and platform copy/export, config persistence to `userData`. |
 | [electron/preload.js](electron/preload.js) | Context bridge exposing safe IPC methods to the renderer. |
 | [electron/renderer/index.html](electron/renderer/index.html) | Electron renderer: split-pane Markdown editor (CodeMirror) + live preview with 500ms debounce. |
+| [scripts/social_worker.js](scripts/social_worker.js) | Playwright worker for browser-based publishing to 知乎/小红书/Twitter. Runs as a standalone Node process. Handles login, image upload via each platform's editor, content filling (clipboard paste for 知乎). Stdout protocol: `INFO:`, `PROGRESS:`, `COOKIES_SAVED`, `READY_TO_PUBLISH`, `PUBLISHED:`, `DIAG:`, `ERROR:`, `NEED_INSTALL`. |
 | [scripts/xhs_screenshot.js](scripts/xhs_screenshot.js) | Playwright script for Xiaohongshu image export. Opens HTML in Chromium, full-page screenshot, smart slice at clean rows. Communicates via stdout protocol (`INFO:`, `SAVED:`, `ERROR:`). |
-| [scripts/zhihu_login.js](scripts/zhihu_login.js) | Playwright browser automation for Zhihu QR code login. Opens real browser, waits for login, extracts cookies, outputs `COOKIE:<json>`. |
 | [templates/wechat.html](templates/wechat.html) | Default HTML wrapper template. Users can override by placing custom `.html` files in their workspace `templates/` directory. |
 
 ### Key patterns
@@ -54,8 +57,18 @@ gray-matter (frontmatter parsing)
 
 ### Extension activation
 
-The extension activates on `onLanguage:markdown` and registers:
+The extension activates on `onLanguage:markdown` and `onLanguage:quarto` and registers:
 - `qmd2any.preview` — opens a Webview panel (right side), 500ms debounced auto-refresh on save
 - `qmd2any.convert` — exports inline-styled HTML to `build/wechat.html`
 
-Shortcut: `Cmd+Shift+W` / `Ctrl+Shift+W` while editing a `.md` file.
+Shortcut: `Cmd+Shift+W` / `Ctrl+Shift+W` while editing a `.md` or `.qmd` file.
+
+### Social publishing flow
+
+Publishing to 知乎/小红书/Twitter uses Playwright browser automation:
+
+1. **Cookie management**: Cookies are stored in VS Code `globalState` (never on disk). `lib/social.js` provides `getCookies`/`setCookies`/`clearCookies`/`cookieStatus`.
+2. **Child process**: `lib/social.js` spawns `scripts/social_worker.js` via `child_process.spawn(process.execPath, [...])`. Communication is via stdout line protocol (`INFO:`, `PROGRESS:`, `READY_TO_PUBLISH`, `PUBLISHED:`, `ERROR:`, `DIAG:`).
+3. **知乎**: Uses `loginAndPublish` — login and publish in the same browser process to avoid cross-process cookie issues. Opens the Zhihu editor, fills title, pastes clean HTML via clipboard, uploads images through the editor's own file input.
+4. **小红书**: Opens creator.xiaohongshu.com, uploads images, fills title/body/tags.
+5. **Resume**: If publishing fails, the browser stays open and the job file is preserved in `os.tmpdir()` for `resume()` recovery.
