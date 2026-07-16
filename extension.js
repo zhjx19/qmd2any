@@ -1006,7 +1006,7 @@ function getWebviewHtml(webview, _bodyHtml, mdPath) {
     .btn-quarto-compile { background: #6a3de8; color: #fff; }
     .btn-quarto-compile:hover { background: #5a2dd8; }
     /* ── Quarto 编译状态栏 ── */
-    #quarto-status-bar {
+    #compilable-status-bar {
       display: none;
       align-items: center;
       gap: 8px;
@@ -1017,8 +1017,8 @@ function getWebviewHtml(webview, _bodyHtml, mdPath) {
       color: #aaa;
       flex-shrink: 0;
     }
-    #quarto-status-bar.show { display: flex; }
-    #quarto-status-bar .spinner {
+    #compilable-status-bar.show { display: flex; }
+    #compilable-status-bar .spinner {
       width: 14px; height: 14px;
       border: 2px solid #444;
       border-top: 2px solid #6a3de8;
@@ -1058,9 +1058,9 @@ function getWebviewHtml(webview, _bodyHtml, mdPath) {
   </div>
 
   <!-- Quarto 编译状态栏 -->
-  <div id="quarto-status-bar">
+  <div id="compilable-status-bar">
     <div class="spinner" id="quarto-spinner" style="display:none;"></div>
-    <span id="quarto-status-msg">请点击「🔄 编译」以渲染 Quarto 文档</span>
+    <span id="compilable-status-msg">请点击「🔄 编译」以渲染文档</span>
     <button class="btn btn-quarto-compile" id="btn-quarto-compile-inline" style="padding:3px 10px;font-size:12px;">🔄 编译</button>
   </div>
 
@@ -1269,7 +1269,7 @@ function getWebviewHtml(webview, _bodyHtml, mdPath) {
     document.getElementById('btn-quarto-compile-inline').addEventListener('click', () => {
       if (_quartoIsCompiling) return;
       setQuartoCompiling(true);
-      document.getElementById('quarto-status-msg').textContent = '正在启动 Quarto...';
+      document.getElementById('compilable-status-msg').textContent = '正在启动 Quarto...';
       vscode.postMessage({ type: 'quartoCompile' });
     });
 
@@ -1445,9 +1445,9 @@ function getWebviewHtml(webview, _bodyHtml, mdPath) {
           if (panelState.tocPanelOpen) buildToc();
           // QMD 模式：状态栏保留唯一的编译按钮；缓存有效时不隐藏。
           if (msg.isCompilable) {
-            const bar = document.getElementById('quarto-status-bar');
+            const bar = document.getElementById('compilable-status-bar');
             if (bar) bar.classList.add('show');
-            const statusMsg = document.getElementById('quarto-status-msg');
+            const statusMsg = document.getElementById('compilable-status-msg');
             if (statusMsg) statusMsg.textContent = '已使用编译缓存，若需重新编译，请点击：';
             setQuartoCompiling(false);
           }
@@ -1456,16 +1456,16 @@ function getWebviewHtml(webview, _bodyHtml, mdPath) {
 
         // ── Quarto 消息 ──
         case 'compilableMode': {
-          // 进入 QMD 模式：状态栏会显示编译按钮
+          // 进入编译模式：状态栏会显示编译按钮
           break;
         }
         case 'quartoStatus': {
           // 需要编译或已就绪
-          const bar = document.getElementById('quarto-status-bar');
+          const bar = document.getElementById('compilable-status-bar');
           if (msg.needsCompile) {
             if (bar) {
               bar.classList.add('show');
-              document.getElementById('quarto-status-msg').textContent = msg.message || '请先编译 Quarto 文档';
+              document.getElementById('compilable-status-msg').textContent = msg.message || '请先编译文档';
             }
             setQuartoCompiling(false);
           } else {
@@ -1474,16 +1474,16 @@ function getWebviewHtml(webview, _bodyHtml, mdPath) {
           break;
         }
         case 'quartoCompileProgress': {
-          const bar = document.getElementById('quarto-status-bar');
+          const bar = document.getElementById('compilable-status-bar');
           if (bar) bar.classList.add('show');
-          document.getElementById('quarto-status-msg').textContent = msg.message || '';
+          document.getElementById('compilable-status-msg').textContent = msg.message || '';
           break;
         }
         case 'quartoCompileDone': {
           setQuartoCompiling(false);
-          const bar = document.getElementById('quarto-status-bar');
+          const bar = document.getElementById('compilable-status-bar');
           if (bar) bar.classList.add('show');
-          const statusMsg = document.getElementById('quarto-status-msg');
+          const statusMsg = document.getElementById('compilable-status-msg');
           if (statusMsg) statusMsg.textContent = msg.cached
             ? '已使用编译缓存，若需重新编译，请点击：'
             : '✅ Quarto 编译完成';
@@ -1492,9 +1492,9 @@ function getWebviewHtml(webview, _bodyHtml, mdPath) {
         }
         case 'quartoCompileError': {
           setQuartoCompiling(false);
-          const bar = document.getElementById('quarto-status-bar');
+          const bar = document.getElementById('compilable-status-bar');
           if (bar) bar.classList.add('show');
-          document.getElementById('quarto-status-msg').textContent = '❌ ' + (msg.message || '编译失败');
+          document.getElementById('compilable-status-msg').textContent = '❌ ' + (msg.message || '编译失败');
           showToast('Quarto 编译失败: ' + (msg.message || '未知错误'), 'error', 5000);
           break;
         }
