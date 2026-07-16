@@ -124,10 +124,14 @@ async function resolveMdFilePath(uri) {
   if (activeTextEditor) {
     const doc = activeTextEditor.document;
     if (doc.languageId === 'markdown' || doc.languageId === 'quarto') {
+      if (doc.isDirty) await doc.save();
       return doc.uri.fsPath;
     }
     // .ipynb opened as text file (not notebook) — languageId is 'json'/'jsonc'
-    if (doc.uri.fsPath.endsWith('.ipynb')) return doc.uri.fsPath;
+    if (doc.uri.fsPath.endsWith('.ipynb')) {
+      if (doc.isDirty) await doc.save();
+      return doc.uri.fsPath;
+    }
   }
 
   const notebookEditor = vscode.window.activeNotebookEditor;
