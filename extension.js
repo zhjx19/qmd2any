@@ -109,26 +109,35 @@ function renderForPlatform(filePath) {
  * @returns {string|null}
  */
 async function resolveMdFilePath(uri) {
+  // From right-click menu or command palette with explicit URI
   if (uri && uri.fsPath) {
+    if (uri.fsPath.endsWith('.ipynb')) return uri.fsPath;
     if (!uri.fsPath.endsWith('.md') && !uri.fsPath.endsWith('.qmd')) {
-      vscode.window.showErrorMessage('请选择 Markdown (.md) 或 Quarto (.qmd) 文件');
+      vscode.window.showErrorMessage('请选择 Markdown (.md)、Quarto (.qmd) 或 Notebook (.ipynb) 文件');
       return null;
     }
     return uri.fsPath;
   }
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) {
-    vscode.window.showErrorMessage('请先打开一个 Markdown 文件');
-    return null;
+
+  // No URI — get from active editor (could be TextEditor or NotebookEditor)
+  const activeTextEditor = vscode.window.activeTextEditor;
+  if (activeTextEditor) {
+    const doc = activeTextEditor.document;
+    if (doc.languageId === 'markdown' || doc.languageId === 'quarto') {
+      return doc.uri.fsPath;
+    }
+    // .ipynb opened as text file (not notebook) — languageId is 'json'/'jsonc'
+    if (doc.uri.fsPath.endsWith('.ipynb')) return doc.uri.fsPath;
   }
-  if (editor.document.languageId !== 'markdown' && editor.document.languageId !== 'quarto') {
-    vscode.window.showErrorMessage('当前文件不是 Markdown 或 Quarto 格式');
-    return null;
+
+  const notebookEditor = vscode.window.activeNotebookEditor;
+  if (notebookEditor) {
+    const nbUri = notebookEditor.notebook.uri;
+    if (nbUri.fsPath.endsWith('.ipynb')) return nbUri.fsPath;
   }
-  if (editor.document.isDirty) {
-    await editor.document.save();
-  }
-  return editor.document.uri.fsPath;
+
+  vscode.window.showErrorMessage('请打开 Markdown (.md)、Quarto (.qmd) 或 Notebook (.ipynb) 文件');
+  return null;
 }
 
 // ─────────────────────────────────────────────
@@ -248,7 +257,7 @@ function updateCompilablePreview(panel, qmdPath) {
     panel.webview.postMessage({
       type: 'quartoStatus',
       needsCompile: true,
-      message: '请先点击「🔄 编译」用 Quarto 将 .qmd 编译为 Markdown',
+      message: '请先点击「🔄 编译」用 Quarto 编译文件',
     });
   }
 }
