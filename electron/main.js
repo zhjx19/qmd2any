@@ -15,9 +15,11 @@ const quarto = require('../lib/quarto');
 
 // ── Helpers ──────────────────────────────────────────────
 
+const COMPILABLE_EXTENSIONS = ['.qmd', '.ipynb'];
+
 /** @param {string} filePath @returns {boolean} */
-function isQuartoFile(filePath) {
-  return filePath.endsWith('.qmd');
+function isCompilableFile(filePath) {
+  return COMPILABLE_EXTENSIONS.some(ext => filePath.endsWith(ext));
 }
 
 /**
@@ -25,9 +27,9 @@ function isQuartoFile(filePath) {
  * For .qmd files, requires prior compilation (checks cache).
  */
 function renderForPlatform(filePath) {
-  if (isQuartoFile(filePath)) {
+  if (isCompilableFile(filePath)) {
     if (!quarto.isCacheValid(filePath)) {
-      throw new Error('请先在预览中点击「🔄 编译」用 Quarto 编译 .qmd 文件');
+      throw new Error('请先在预览中点击「🔄 编译」用 Quarto 编译文件');
     }
     const cached = quarto.getCached(filePath);
     return renderQuarto(filePath, cached.mdPath);
@@ -72,8 +74,8 @@ function saveConfigToDisk() {
 // ── Render preview from Markdown file ───────────────────
 
 function renderAndSendPreview(mdPath) {
-  if (isQuartoFile(mdPath)) {
-    renderQuartoPreview(mdPath);
+  if (isCompilableFile(mdPath)) {
+    renderCompilablePreview(mdPath);
     return;
   }
   try {
@@ -89,7 +91,7 @@ function renderAndSendPreview(mdPath) {
   }
 }
 
-function renderQuartoPreview(qmdPath) {
+function renderCompilablePreview(qmdPath) {
   if (quarto.isCacheValid(qmdPath)) {
     const cached = quarto.getCached(qmdPath);
     try {
@@ -98,7 +100,7 @@ function renderQuartoPreview(qmdPath) {
       sendToRenderer('update', {
         bodyHtml,
         title,
-        isQuarto: true,
+        isCompilable: true,
         theme: { id: theme.id, css: theme.css, wrapperBg: theme.wrapperBg },
       });
     } catch (err) {
@@ -107,7 +109,7 @@ function renderQuartoPreview(qmdPath) {
   } else {
     sendToRenderer('quartoStatus', {
       needsCompile: true,
-      message: '请先点击「🔄 编译」用 Quarto 将 .qmd 编译为 Markdown',
+      message: '请先点击「🔄 编译」用 Quarto 编译文件',
     });
   }
 }
@@ -250,9 +252,9 @@ ipcMain.on('saveFile', (_event, content) => {
 // ── Editor content changed (debounced by renderer) ──────
 
 ipcMain.on('editorContentChanged', (_event, content) => {
-  // For .qmd files, the editor preview uses the cached compiled .md
-  // (not the raw qmd content). Skip preview until compiled.
-  if (currentFilePath && isQuartoFile(currentFilePath)) {
+  // For compilable files (.qmd, .ipynb), the editor preview uses the cached compiled .md
+  // (not the raw compilable file content). Skip preview until compiled.
+  if (currentFilePath && isCompilableFile(currentFilePath)) {
     renderAndSendPreview(currentFilePath);
     return;
   }
@@ -273,8 +275,8 @@ ipcMain.on('editorContentChanged', (_event, content) => {
 // ── Quarto compile ──────────────────────────────────────
 
 ipcMain.on('quartoCompile', async () => {
-  if (!currentFilePath || !isQuartoFile(currentFilePath)) {
-    sendToRenderer('quartoCompileError', { message: '当前文件不是 .qmd 格式' });
+  if (!currentFilePath || !isCompilableFile(currentFilePath)) {
+    sendToRenderer('quartoCompileError', { message: '当前文件不是 .qmd 或 .ipynb 格式' });
     return;
   }
   try {
@@ -298,8 +300,8 @@ ipcMain.on('ready', () => {
     currentId: currentThemeId,
   });
   sendToRenderer('config', configStore);
-  if (currentFilePath && isQuartoFile(currentFilePath)) {
-    sendToRenderer('quartoMode', { isQuarto: true });
+  if (currentFilePath && isCompilableFile(currentFilePath)) {
+    sendToRenderer('compilableMode', { isCompilable: true });
   }
 });
 
@@ -365,7 +367,7 @@ ipcMain.on('exportHtml', async () => {
       return;
     }
 
-    if (isQuartoFile(currentFilePath)) {
+    if (isCompilableFile(currentFilePath)) {
       const { bodyHtml } = renderForPlatform(currentFilePath);
       const finalHtml = buildFullHtml(bodyHtml, templatePath);
       const outDir2 = path.dirname(outputPath);
