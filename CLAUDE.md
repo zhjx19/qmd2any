@@ -40,7 +40,7 @@ gray-matter (frontmatter parsing)
 | [lib/themes.js](lib/themes.js) | Exports `THEMES` array, `DEFAULT_THEME_ID`, `getTheme()`. 6 built-in themes (wechat/claude/macos/zhihu/monochrome/notion), each with a CSS string and `wrapperBg` color. |
 | [lib/zhihu.js](lib/zhihu.js) | Zhihu HTTP API module (legacy image upload path). Login verification, two-phase image upload (md5 pre-check → ali-oss upload), article create/update/save-draft. Uses raw `https` module (no axios/fetch). The browser-based publishing path in `social.js` + `social_worker.js` is now the primary flow. |
 | [lib/social.js](lib/social.js) | Playwright browser automation scheduler (host side). Cookie management via VS Code `globalState` (never touches disk). Spawns `social_worker.js` as a child process, parses its stdout protocol. Exports `login`, `publish`, `resume`, `loginAndPublish` for 知乎/小红书/Twitter. |
-| [lib/quarto.js](lib/quarto.js) | Quarto `.qmd` compilation. Spawns `quarto render --to gfm`, extracts YAML frontmatter, manages cross-session compile cache (skips re-compile when `.qmd` hasn't changed). Single-file only — no book project support. |
+| [lib/quarto.js](lib/quarto.js) | Quarto compilation for `.qmd` and `.ipynb`. Spawns `quarto render --to gfm`, extracts YAML frontmatter, manages cross-session compile cache (skips re-compile when source hasn't changed). Single-file only — no book project support. |
 | [electron/main.js](electron/main.js) | Electron main process. File open/save dialogs, IPC handlers for rendering and platform copy/export, config persistence to `userData`. |
 | [electron/preload.js](electron/preload.js) | Context bridge exposing safe IPC methods to the renderer. |
 | [electron/renderer/index.html](electron/renderer/index.html) | Electron renderer: split-pane Markdown editor (CodeMirror) + live preview with 500ms debounce. |
@@ -57,11 +57,11 @@ gray-matter (frontmatter parsing)
 
 ### Extension activation
 
-The extension activates on `onLanguage:markdown` and `onLanguage:quarto` and registers:
+The extension activates on `onLanguage:markdown`, `onLanguage:quarto`, `onNotebook:jupyter-notebook`, and `onStartupFinished`, and registers:
 - `qmd2any.preview` — opens a Webview panel (right side), 500ms debounced auto-refresh on save
 - `qmd2any.convert` — exports inline-styled HTML to `build/wechat.html`
 
-Shortcut: `Cmd+Shift+W` / `Ctrl+Shift+W` while editing a `.md` or `.qmd` file.
+Shortcut: `Cmd+Shift+W` / `Ctrl+Shift+W` while editing a `.md`, `.qmd`, or `.ipynb` file.
 
 ### Social publishing flow
 
