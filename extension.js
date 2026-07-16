@@ -10,11 +10,11 @@ const zhihu = require('./lib/zhihu');
 const social = require('./lib/social');
 const quarto = require('./lib/quarto');
 
-// ── 工具：判断是否为 Quarto 文件 ──
+const COMPILABLE_EXTENSIONS = ['.qmd', '.ipynb'];
 
 /** @param {string} filePath @returns {boolean} */
-function isQuartoFile(filePath) {
-  return filePath.endsWith('.qmd');
+function isCompilableFile(filePath) {
+  return COMPILABLE_EXTENSIONS.some(ext => filePath.endsWith(ext));
 }
 
 // ─────────────────────────────────────────────
@@ -90,9 +90,9 @@ function log(msg) {
  * @returns {{ bodyHtml: string, title: string, rawMarkdown: string }}
  */
 function renderForPlatform(filePath) {
-  if (isQuartoFile(filePath)) {
+  if (isCompilableFile(filePath)) {
     if (!quarto.isCacheValid(filePath)) {
-      throw new Error('请先点击「🔄 编译」用 Quarto 编译 .qmd 文件');
+      throw new Error('请先点击「🔄 编译」用 Quarto 编译文件');
     }
     const cached = quarto.getCached(filePath);
     return renderQuarto(filePath, cached.mdPath);
@@ -217,8 +217,8 @@ function scheduleUpdate(mdPath) {
 }
 
 function updatePreview(panel, mdPath) {
-  if (isQuartoFile(mdPath)) {
-    updateQuartoPreview(panel, mdPath);
+  if (isCompilableFile(mdPath)) {
+    updateCompilablePreview(panel, mdPath);
     return;
   }
   try {
@@ -233,13 +233,13 @@ function updatePreview(panel, mdPath) {
 /**
  * QMD 预览：优先用缓存，否则提示编译
  */
-function updateQuartoPreview(panel, qmdPath) {
+function updateCompilablePreview(panel, qmdPath) {
   if (quarto.isCacheValid(qmdPath)) {
     const cached = quarto.getCached(qmdPath);
     try {
       const { bodyHtml, title } = renderQuarto(qmdPath, cached.mdPath);
       const theme = getTheme(currentThemeId);
-      panel.webview.postMessage({ type: 'update', bodyHtml, title, isQuarto: true, theme: { id: theme.id, css: theme.css, wrapperBg: theme.wrapperBg } });
+      panel.webview.postMessage({ type: 'update', bodyHtml, title, isCompilable: true, theme: { id: theme.id, css: theme.css, wrapperBg: theme.wrapperBg } });
     } catch (err) {
       panel.webview.postMessage({ type: 'error', message: err.message });
     }
@@ -270,16 +270,16 @@ async function handleWebviewMessage(msg, panel, mdPath) {
         currentId: currentThemeId,
       });
       // QMD 文件：告知前端当前模式
-      if (isQuartoFile(mdPath)) {
-        panel.webview.postMessage({ type: 'quartoMode', isQuarto: true });
+      if (isCompilableFile(mdPath)) {
+        panel.webview.postMessage({ type: 'compilableMode', isCompilable: true });
       }
       break;
     }
 
     // ── Quarto 编译 ──
     case 'quartoCompile': {
-      if (!isQuartoFile(mdPath)) {
-        panel.webview.postMessage({ type: 'quartoCompileError', message: '当前文件不是 .qmd 格式' });
+      if (!isCompilableFile(mdPath)) {
+        panel.webview.postMessage({ type: 'quartoCompileError', message: '当前文件不是 .qmd 或 .ipynb 格式' });
         break;
       }
       try {
@@ -440,7 +440,7 @@ async function handleWebviewMessage(msg, panel, mdPath) {
         // 准备发布内容
         const cfg = vscode.workspace.getConfiguration('qmd2any');
         const cleanHtml = zhihu.buildPublishHtml(bodyHtml);
-        const imageMdPath = isQuartoFile(mdPath)
+        const imageMdPath = isCompilableFile(mdPath)
           ? (quarto.getCached(mdPath) ? quarto.getCached(mdPath).mdPath : mdPath)
           : mdPath;
         const localImages = listMarkdownLocalImages(imageMdPath);
@@ -527,7 +527,7 @@ async function handleWebviewMessage(msg, panel, mdPath) {
         const cfg = vscode.workspace.getConfiguration('qmd2any');
         const { bodyHtml } = renderForPlatform(mdPath);
         const cleanHtml = zhihu.buildPublishHtml(bodyHtml);
-        const imageMdPath = isQuartoFile(mdPath)
+        const imageMdPath = isCompilableFile(mdPath)
           ? (quarto.getCached(mdPath) ? quarto.getCached(mdPath).mdPath : mdPath)
           : mdPath;
         const localImages = listMarkdownLocalImages(imageMdPath);
@@ -1435,7 +1435,7 @@ function getWebviewHtml(webview, _bodyHtml, mdPath) {
           // 内容更新后同步重建目录
           if (panelState.tocPanelOpen) buildToc();
           // QMD 模式：状态栏保留唯一的编译按钮；缓存有效时不隐藏。
-          if (msg.isQuarto) {
+          if (msg.isCompilable) {
             const bar = document.getElementById('quarto-status-bar');
             if (bar) bar.classList.add('show');
             const statusMsg = document.getElementById('quarto-status-msg');
@@ -1446,7 +1446,7 @@ function getWebviewHtml(webview, _bodyHtml, mdPath) {
         }
 
         // ── Quarto 消息 ──
-        case 'quartoMode': {
+        case 'compilableMode': {
           // 进入 QMD 模式：状态栏会显示编译按钮
           break;
         }
