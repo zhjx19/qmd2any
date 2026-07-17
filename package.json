@@ -2,7 +2,7 @@
   "name": "qmd2any",
   "displayName": "QMD2Any - Quarto 一键导出微信/知乎",
   "description": "将 Markdown / Quarto (.qmd) / Notebook (.ipynb) 一键导出到微信公众号和知乎，支持 LaTeX 公式、代码高亮、6 套主题、实时预览、Quarto 编译集成",
-  "version": "2.2.2",
+  "version": "2.3.0",
   "publisher": "ZhangJingxin",
   "license": "MIT",
   "icon": "icon.png",
@@ -22,6 +22,8 @@
     "markdown",
     "quarto",
     "qmd",
+    "Rmd",
+    "rmarkdown",
     "ipynb",
     "notebook",
     "jupyter",
@@ -48,6 +50,7 @@
   "activationEvents": [
     "onLanguage:markdown",
     "onLanguage:quarto",
+    "onLanguage:rmd",
     "onNotebook:jupyter-notebook",
     "onStartupFinished"
   ],
@@ -73,7 +76,7 @@
       "editor/title": [
         {
           "command": "qmd2any.preview",
-          "when": "resourceLangId == markdown || resourceLangId == quarto || resourceExtname == .ipynb",
+          "when": "resourceLangId == markdown || resourceLangId == quarto || resourceLangId == rmd || resourceExtname == .ipynb || resourceExtname == .Rmd",
           "group": "navigation"
         }
       ],
@@ -87,19 +90,19 @@
       "explorer/context": [
         {
           "command": "qmd2any.preview",
-          "when": "resourceExtname == .md || resourceExtname == .qmd || resourceExtname == .ipynb",
+          "when": "resourceExtname == .md || resourceExtname == .qmd || resourceExtname == .ipynb || resourceExtname == .Rmd",
           "group": "1_modification"
         },
         {
           "command": "qmd2any.convert",
-          "when": "resourceExtname == .md || resourceExtname == .qmd || resourceExtname == .ipynb",
+          "when": "resourceExtname == .md || resourceExtname == .qmd || resourceExtname == .ipynb || resourceExtname == .Rmd",
           "group": "1_modification"
         }
       ],
       "editor/context": [
         {
           "command": "qmd2any.preview",
-          "when": "resourceLangId == markdown || resourceLangId == quarto || resourceExtname == .ipynb",
+          "when": "resourceLangId == markdown || resourceLangId == quarto || resourceLangId == rmd || resourceExtname == .ipynb || resourceExtname == .Rmd",
           "group": "1_modification"
         }
       ]

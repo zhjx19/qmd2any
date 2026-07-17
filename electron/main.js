@@ -15,7 +15,7 @@ const quarto = require('../lib/quarto');
 
 // ── Helpers ──────────────────────────────────────────────
 
-const COMPILABLE_EXTENSIONS = ['.qmd', '.ipynb'];
+const COMPILABLE_EXTENSIONS = ['.qmd', '.ipynb', '.Rmd'];
 
 /** @param {string} filePath @returns {boolean} */
 function isCompilableFile(filePath) {
@@ -252,7 +252,7 @@ ipcMain.on('saveFile', (_event, content) => {
 // ── Editor content changed (debounced by renderer) ──────
 
 ipcMain.on('editorContentChanged', (_event, content) => {
-  // For compilable files (.qmd, .ipynb), the editor preview uses the cached compiled .md
+  // For compilable files (.qmd, .ipynb, .Rmd), the editor preview uses the cached compiled .md
   // (not the raw compilable file content). Skip preview until compiled.
   if (currentFilePath && isCompilableFile(currentFilePath)) {
     renderAndSendPreview(currentFilePath);
@@ -276,7 +276,7 @@ ipcMain.on('editorContentChanged', (_event, content) => {
 
 ipcMain.on('quartoCompile', async () => {
   if (!currentFilePath || !isCompilableFile(currentFilePath)) {
-    sendToRenderer('quartoCompileError', { message: '当前文件不是 .qmd 或 .ipynb 格式' });
+    sendToRenderer('quartoCompileError', { message: '当前文件不是 .qmd / .ipynb / .Rmd 格式' });
     return;
   }
   try {

@@ -10,7 +10,7 @@ const zhihu = require('./lib/zhihu');
 const social = require('./lib/social');
 const quarto = require('./lib/quarto');
 
-const COMPILABLE_EXTENSIONS = ['.qmd', '.ipynb'];
+const COMPILABLE_EXTENSIONS = ['.qmd', '.ipynb', '.Rmd'];
 
 /** @param {string} filePath @returns {boolean} */
 function isCompilableFile(filePath) {
@@ -53,7 +53,7 @@ function activate(context) {
 
     // 文档变更时更新预览（500ms 防抖）
     vscode.workspace.onDidChangeTextDocument((e) => {
-      if (e.document.languageId !== 'markdown' && e.document.languageId !== 'quarto') return;
+      if (e.document.languageId !== 'markdown' && e.document.languageId !== 'quarto' && e.document.languageId !== 'rmd') return;
       const mdPath = e.document.uri.fsPath;
       if (!previewPanels.has(mdPath)) return;
       scheduleUpdate(mdPath);
@@ -61,7 +61,7 @@ function activate(context) {
 
     // 活跃编辑器切换时如有已开启的预览则刷新
     vscode.window.onDidChangeActiveTextEditor((editor) => {
-      if (!editor || (editor.document.languageId !== 'markdown' && editor.document.languageId !== 'quarto')) return;
+      if (!editor || (editor.document.languageId !== 'markdown' && editor.document.languageId !== 'quarto' && editor.document.languageId !== 'rmd')) return;
       const mdPath = editor.document.uri.fsPath;
       if (previewPanels.has(mdPath)) {
         scheduleUpdate(mdPath);
@@ -111,9 +111,9 @@ function renderForPlatform(filePath) {
 async function resolveMdFilePath(uri) {
   // From right-click menu or command palette with explicit URI
   if (uri && uri.fsPath) {
-    if (uri.fsPath.endsWith('.ipynb')) return uri.fsPath;
-    if (!uri.fsPath.endsWith('.md') && !uri.fsPath.endsWith('.qmd')) {
-      vscode.window.showErrorMessage('请选择 Markdown (.md)、Quarto (.qmd) 或 Notebook (.ipynb) 文件');
+    if (isCompilableFile(uri.fsPath)) return uri.fsPath;
+    if (!uri.fsPath.endsWith('.md')) {
+      vscode.window.showErrorMessage('请选择 Markdown (.md)、Quarto (.qmd)、R Markdown (.Rmd) 或 Notebook (.ipynb) 文件');
       return null;
     }
     return uri.fsPath;
@@ -123,12 +123,12 @@ async function resolveMdFilePath(uri) {
   const activeTextEditor = vscode.window.activeTextEditor;
   if (activeTextEditor) {
     const doc = activeTextEditor.document;
-    if (doc.languageId === 'markdown' || doc.languageId === 'quarto') {
+    if (doc.languageId === 'markdown' || doc.languageId === 'quarto' || doc.languageId === 'rmd') {
       if (doc.isDirty) await doc.save();
       return doc.uri.fsPath;
     }
-    // .ipynb opened as text file (not notebook) — languageId is 'json'/'jsonc'
-    if (doc.uri.fsPath.endsWith('.ipynb')) {
+    // .ipynb / .Rmd opened as text file — languageId may differ
+    if (isCompilableFile(doc.uri.fsPath)) {
       if (doc.isDirty) await doc.save();
       return doc.uri.fsPath;
     }
@@ -137,10 +137,10 @@ async function resolveMdFilePath(uri) {
   const notebookEditor = vscode.window.activeNotebookEditor;
   if (notebookEditor) {
     const nbUri = notebookEditor.notebook.uri;
-    if (nbUri.fsPath.endsWith('.ipynb')) return nbUri.fsPath;
+    if (isCompilableFile(nbUri.fsPath)) return nbUri.fsPath;
   }
 
-  vscode.window.showErrorMessage('请打开 Markdown (.md)、Quarto (.qmd) 或 Notebook (.ipynb) 文件');
+  vscode.window.showErrorMessage('请打开 Markdown (.md)、Quarto (.qmd)、R Markdown (.Rmd) 或 Notebook (.ipynb) 文件');
   return null;
 }
 
@@ -292,7 +292,7 @@ async function handleWebviewMessage(msg, panel, mdPath) {
     // ── Quarto 编译 ──
     case 'quartoCompile': {
       if (!isCompilableFile(mdPath)) {
-        panel.webview.postMessage({ type: 'quartoCompileError', message: '当前文件不是 .qmd 或 .ipynb 格式' });
+        panel.webview.postMessage({ type: 'quartoCompileError', message: '当前文件不是 .qmd / .ipynb / .Rmd 格式' });
         break;
       }
       try {

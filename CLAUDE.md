@@ -61,7 +61,7 @@ The extension activates on `onLanguage:markdown`, `onLanguage:quarto`, `onNotebo
 - `qmd2any.preview` — opens a Webview panel (right side), 500ms debounced auto-refresh on save
 - `qmd2any.convert` — exports inline-styled HTML to `build/wechat.html`
 
-Shortcut: `Cmd+Shift+W` / `Ctrl+Shift+W` while editing a `.md`, `.qmd`, or `.ipynb` file.
+Shortcut: `Cmd+Shift+W` / `Ctrl+Shift+W` while editing a `.md`, `.qmd`, `.Rmd`, or `.ipynb` file.
 
 ### Social publishing flow
 

@@ -230,6 +230,11 @@ social.publish() → Playwright 浏览器自动化
 
 ## 版本历史
 
+### v2.3.0
+
+- **新增**：R Markdown (.Rmd) 支持 — 编译、预览、复制微信、发布知乎全部可用
+- **改善**：`resolveMdFilePath` 用 `isCompilableFile()` 统一判断，消除逐个扩展名对比
+
 ### v2.2.2
 
 - **修复**：知乎块公式居中 — `alt` 中 `\\` 移到末尾（知乎居中约定），修复 v2.2.1 修复不完整的问题
