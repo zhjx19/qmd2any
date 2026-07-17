@@ -1,14 +1,14 @@
-# QMD2Any — Quarto / Markdown / Notebook 一键导出微信 & 知乎
+# QMD2Any — Quarto / Markdown / R Markdown / Notebook 一键导出微信 & 知乎
 
 [![VS Code Marketplace](https://img.shields.io/badge/VS%20Code-Install-2d7a3e?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=ZhangJingxin.qmd2any)
 [![GitHub Release](https://img.shields.io/github/v/release/zhjx19/qmd2any?logo=github&label=Release)](https://github.com/zhjx19/qmd2any/releases/latest)
 
 > 🔌 Forked from [markdown2anything](https://github.com/marsggbo/markdown2anything) v3.0（by [@marsggbo](https://github.com/marsggbo)）
-> — 在原有 Markdown → 微信/知乎 管线的基础上，新增 **Quarto (.qmd) 和 Jupyter Notebook (.ipynb) 一键编译发布**支持。
+> — 在原有 Markdown → 微信/知乎 管线的基础上，新增 **Quarto (.qmd)、R Markdown (.Rmd) 和 Jupyter Notebook (.ipynb) 一键编译发布**支持。
 
 ---
 
-将 Markdown / Quarto (.qmd) / Jupyter Notebook (.ipynb) 文章一键渲染并导出到微信公众号和知乎，支持 **LaTeX 公式**、**6 套内置主题**、**实时预览**、**一键复制微信**、**Quarto 编译集成**和 **Playwright 浏览器自动化发布知乎**。
+将 Markdown / Quarto (.qmd) / R Markdown (.Rmd) / Jupyter Notebook (.ipynb) 文章一键渲染并导出到微信公众号和知乎，支持 **LaTeX 公式**、**6 套内置主题**、**实时预览**、**一键复制微信**、**Quarto 编译集成**和 **Playwright 浏览器自动化发布知乎**。
 
 支持两种形态：**VS Code 插件** 和 **独立桌面客户端**（Electron），互不依赖，按需选择。
 
@@ -104,9 +104,9 @@ code .   # 按 F5 启动调试
 2. 点击编辑器右上角的预览按钮（或 `Ctrl+Shift+W`）
 3. 右侧弹出实时预览面板，保存时自动刷新
 
-### Quarto (.qmd) 或 Notebook (.ipynb) 文件
+### Quarto (.qmd)、R Markdown (.Rmd) 或 Notebook (.ipynb) 文件
 
-1. 在 VS Code 中打开 `.qmd` 或 `.ipynb` 文件
+1. 在 VS Code 中打开 `.qmd`、`.Rmd` 或 `.ipynb` 文件
 2. **对于 `.ipynb`**：先在 notebook 编辑器中 Run All 运行所有单元格，保存
 3. 点击编辑器右上角的预览按钮（或 `Ctrl+Shift+W`）
 4. 预览面板打开，点击状态栏的 **「🔄 编译」**
@@ -230,10 +230,11 @@ social.publish() → Playwright 浏览器自动化
 
 ## 版本历史
 
-### v2.3.0
+### v2.3.1
 
 - **新增**：R Markdown (.Rmd) 支持 — 编译、预览、复制微信、发布知乎全部可用
 - **改善**：`resolveMdFilePath` 用 `isCompilableFile()` 统一判断，消除逐个扩展名对比
+- **文档**：更新 readme 标题、描述、快速开始等关键位置，补全 Rmd 说明
 
 ### v2.2.2
 
