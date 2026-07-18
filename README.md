@@ -1,10 +1,10 @@
-# QMD2Any — Quarto / Markdown / R Markdown / Notebook 一键导出微信 & 知乎
+# QMD2Any — Quarto / Markdown / R Markdown / Notebook 一键导出公众号 & 知乎
 
 [![VS Code Marketplace](https://img.shields.io/badge/VS%20Code-Install-2d7a3e?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=ZhangJingxin.qmd2any)
 [![GitHub Release](https://img.shields.io/github/v/release/zhjx19/qmd2any?logo=github&label=Release)](https://github.com/zhjx19/qmd2any/releases/latest)
 
 > 🔌 Forked from [markdown2anything](https://github.com/marsggbo/markdown2anything) v3.0（by [@marsggbo](https://github.com/marsggbo)）
-> — 在原有 Markdown → 微信/知乎 管线的基础上，新增 **Quarto (.qmd)、R Markdown (.Rmd) 和 Jupyter Notebook (.ipynb) 一键编译发布**支持。
+> — 在原有 Markdown → 公众号/知乎 管线的基础上，新增 **Quarto (.qmd)、R Markdown (.Rmd) 和 Jupyter Notebook (.ipynb) 一键编译发布**支持。
 
 ---
 
@@ -23,20 +23,24 @@
 
 ---
 
-## 🆕 v2.2.0 更新
+## 🆕 v2.3.1 更新
+
+自 v2.1.x 以来的主要变化：
 
 | 功能 | 说明 |
 |------|------|
-| 📓 **Jupyter Notebook 支持** | `.ipynb` 文件可像 `.qmd` 一样编译、预览、发布，自动编译通过 Quarto 完成 |
+| 📓 **Jupyter Notebook 支持** | `.ipynb` 文件可编译、预览、发布微信/知乎，通过 Quarto 完成 |
+| 📐 **R Markdown 支持** | `.Rmd` 文件完整支持，与 `.qmd` 相同的编译管线，Quarto 原生兼容 |
 | 🔧 **Notebook 编辑器集成** | 在 VS Code notebook 编辑器中直接点击工具栏按钮即可预览/发布 |
-| 📋 **动态文件类型适配** | 预览、编译、输出路径等逻辑统一适配 `.md` / `.qmd` / `.ipynb` 三种扩展名 |
-| 🧹 **清理** | 移除未使用的 `zhihu_login.js` 和 `xhs_screenshot.py`；修正文档中过时的主题数量描述 |
+| 📋 **四格式统一适配** | 预览、编译、输出路径等逻辑统一处理 `.md` / `.qmd` / `.Rmd` / `.ipynb` |
+| 🐛 **知乎块公式居中修复** | 修正 `alt` 中 `\\` 位置（末尾 = 居中），v2.2.2 彻底解决 |
+| 🧹 **清理** | 移除未使用的 `zhihu_login.js` 和 `xhs_screenshot.py`；文档全面更新 |
 
 ### 使用 .ipynb 的注意事项
 
 - 打开 `.ipynb` 后先在 notebook 编辑器中 **Run All** 运行所有单元格，然后保存——代码输出会写入 `.ipynb` 文件
 - 再点击编译按钮，Quarto 会读取已保存的输出并渲染到预览面板
-- `.ipynb` 支持与 `.md` / `.qmd` 完全相同的功能：预览、复制微信、发布知乎
+- `.ipynb` 支持与 `.md` / `.qmd` / `.Rmd` 完全相同的功能：预览、复制微信、发布知乎
 
 ---
 
@@ -48,10 +52,10 @@
 | 🚀 **发布知乎** | 扫码登录后，自动打开浏览器 → 填标题 → 粘贴正文 → 上传图片 → 停在你面前，核对后点击「发布」 |
 | 🎨 **6 套内置主题** | 微信经典 / Claude / macOS / 知乎精选 / 极简黑白 / Notion |
 | 📐 **LaTeX 公式渲染** | 支持行内公式 `$...$` 和独立公式块 `$$...$$`，基于 KaTeX 渲染 |
-| 👁️ **实时预览面板** | 在编辑器右侧打开独立预览窗口，文件保存时自动刷新（`.md`/`.qmd`），编译后刷新（`.ipynb`/`.qmd`） |
+| 👁️ **实时预览面板** | 在编辑器右侧打开独立预览窗口，`.md`/`.qmd`/`.Rmd` 保存时自动刷新，编译文件编译后刷新 |
 | 🎨 **在线样式编辑** | 通过主题下拉菜单中的「自定义样式...」打开 CSS 编辑器，实时修改，所见即所得 |
-| 🔄 **Quarto 编译集成** | `.qmd` / `.ipynb` 一键编译为 Markdown，执行 R/Python 代码块，渲染图表、表格 |
-| 📓 **Notebook 支持** | `.ipynb` 文件可直接在 VS Code notebook 编辑器中运行后编译预览 |
+| 🔄 **Quarto 编译集成** | `.qmd` / `.Rmd` / `.ipynb` 一键编译为 Markdown，执行 R/Python 代码块，渲染图表、表格 |
+| 📓 **Notebook 支持** | `.ipynb` 可在 VS Code notebook 编辑器中运行后编译预览；`.Rmd` 与 `.qmd` 一致 |
 
 ### 内置主题与平台适配
 
