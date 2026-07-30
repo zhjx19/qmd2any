@@ -888,12 +888,18 @@ async function publishZhihu(page, def, { title, html, images, mode }) {
   const parts = splitHtmlByImageTags(html);
   const imageFiles = images || [];
   info(`正文拆成 ${parts.segments.length} 段，HTML 图片 ${parts.imageCount} 张，本地图片 ${imageFiles.length} 张`);
-  if (parts.imageCount > imageFiles.length) {
-    info(`⚠️ HTML 中图片数多于本地图片数，将只自动上传前 ${imageFiles.length} 张`);
+  if (parts.imageCount !== imageFiles.length) {
+    info(`⚠️ HTML 图片数 (${parts.imageCount}) 与本地图片数 (${imageFiles.length}) 不一致，图片顺序可能错位`);
+    if (imageFiles.length < parts.imageCount) {
+      info(`缺失 ${parts.imageCount - imageFiles.length} 张图片文件，请检查图片路径后重新发布`);
+    } else {
+      info(`有 ${imageFiles.length - parts.imageCount} 张多余图片未被使用`);
+    }
   }
 
   // ── ③ 分段粘贴 + 文件上传 ──
   step(2, totalSteps, '分段粘贴正文并上传图片');
+  let imageIdx = 0;
   let expectedPlain = '';
   for (let i = 0; i < parts.segments.length; i++) {
     const seg = parts.segments[i];
@@ -903,9 +909,10 @@ async function publishZhihu(page, def, { title, html, images, mode }) {
       await page.waitForTimeout(600);
     }
 
-    if (i < parts.imageCount && imageFiles[i]) {
-      step(2, totalSteps, `上传图片 ${i + 1}/${Math.min(parts.imageCount, imageFiles.length)}`);
-      await uploadZhihuImageAtEnd(page, editor, imageFiles[i], i);
+    if (i < parts.imageCount && imageIdx < imageFiles.length) {
+      step(2, totalSteps, `上传图片 ${imageIdx + 1}/${Math.min(parts.imageCount, imageFiles.length)}`);
+      await uploadZhihuImageAtEnd(page, editor, imageFiles[imageIdx], imageIdx);
+      imageIdx++;
       await page.waitForTimeout(1200);
     }
   }

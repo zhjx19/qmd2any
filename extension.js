@@ -403,6 +403,7 @@ async function handleWebviewMessage(msg, panel, mdPath) {
       await extContext.globalState.update(zhihu.STORAGE_KEY, undefined);
       extContext.globalState.update('zhihu._qrToken', undefined);
       extContext.globalState.update('zhihu._qrCookie', undefined);
+      extContext.globalState.update('zhihu.browserCookies', undefined);
       panel.webview.postMessage({ type: 'zhihuLoginStatus', loggedIn: false });
       break;
     }
@@ -1773,13 +1774,14 @@ function listMarkdownLocalImages(mdPath) {
     const raw = fs.readFileSync(mdPath, 'utf8');
     const dir = path.dirname(mdPath);
     const out = [];
-    const re = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+    // 同时匹配 Markdown 图片 ![](path) 和 HTML <img src="path">，按文档顺序提取
+    const re = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)|<img\b[^>]*\bsrc=(["'])([^"']+?)\2[^>]*>/gi;
     let m;
     while ((m = re.exec(raw)) !== null) {
-      const src = m[1];
-      if (/^(https?:)?\/\//i.test(src) || src.startsWith('data:')) continue;
+      const src = m[1] || m[3];
+      if (!src || /^(https?:)?\/\//i.test(src) || src.startsWith('data:')) continue;
       const abs = path.isAbsolute(src) ? src : path.resolve(dir, src);
-      if (fs.existsSync(abs)) out.push(abs);
+      if (fs.existsSync(abs) && !out.includes(abs)) out.push(abs);
     }
     return out;
   } catch (_) { return []; }
