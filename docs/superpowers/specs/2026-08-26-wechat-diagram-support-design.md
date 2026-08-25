@@ -87,7 +87,7 @@ output: { "html": "...", "rendered": 2, "errors": ["..."] }
 - 文件传参而非 stdin/stdout 管道内容体（规避 Windows 缓冲问题）；
 - 流程：读 input → `findChromium()` → `chromium.launch({ headless: true, executablePath })` → `newPage()` → `renderDiagrams(page, html, [])` → 写 output → exit 0；
 - 致命错误（找不到浏览器等）：stderr 输出 `ERROR:` 行协议信息，exit 非 0；
-- 复用 `findChromium()` 的浏览器定位逻辑——该函数目前在 social_worker.js 与 xhs_screenshot.js 各有一份，本次实现时**优先考虑把它也提到共享位置**（如 lib/diagram/render.js 或独立小工具），至少不新增第四份拷贝。
+- 浏览器定位：`findChromium()` 目前在 social_worker.js 与 xhs_screenshot.js 各有一份拷贝。本次把它**一并提取到 lib/diagram/render.js 并导出**（取两份实现的并集行为），三个脚本统一引用，不新增第四份拷贝。
 
 ### 4.4 VS Code 端接入（extension.js:335-351 改）
 
@@ -104,18 +104,18 @@ if (diagramRender.hasDiagramHtml(bodyHtml)) {
 const html = buildWechatCopyHtml(finalBody, templatePath, theme);
 ```
 
-handler 所在回调本身是 async 兼容的（现有 case 已用 try/catch 包裹，加 await 不影响 postMessage 时序）。
+handler 所在的 `handleWebviewMessage`（extension.js:274）已是 `async function`，case 内直接 `await` 即可，无需改回调结构。
 
 ### 4.5 Electron 端接入（electron/main.js:399-414 改）
 
 同样的「检测 → spawn → 替换 → buildWechatCopyHtml」逻辑插在 `renderForPlatform` 之后。ipcMain.on 回调改为内部 async（sendToRenderer 本就是事后投递，无需改 IPC 形态）。进度提示走现有的 renderer 消息机制（如无现成 toast 通道则 console/log 即可，Electron 端从简）。
 
-### 4.6 spawn 辅助 —— `renderViaScript(extensionPath, html)`
+### 4.6 spawn 辅助 —— `renderViaScript(rootPath, html)`
 
-两端共用的薄封装（放 lib/diagram/render.js 导出，或在各端就近实现，实现计划阶段定夺）：
+两端共用的薄封装，作为 `lib/diagram/render.js` 的导出函数（rootPath 由调用方传入：VS Code 端为 extensionPath，Electron 端为 appRoot）：
 
 - `spawn(process.execPath, [scriptPath, inJson, outJson])` —— **与 lib/social.js:220 完全同款**（实测两端 process.execPath 均可直接跑 js 入口脚本，不需要 ELECTRON_RUN_AS_NODE）；
-- scriptPath = `path.join(extensionPath, 'scripts', 'render_diagrams.js')`（Electron 端为 `appRoot` 下同名路径，参照 electron/main.js:553 的 xhs_screenshot 用法）；
+- scriptPath = `path.join(rootPath, 'scripts', 'render_diagrams.js')`（参照 electron/main.js:553 的 xhs_screenshot 用法）；
 - 解析 output.json 返回替换后的 html；子进程非 0 退出或输出缺失 → 抛错给调用方降级。
 
 ## 5. 错误处理与降级
