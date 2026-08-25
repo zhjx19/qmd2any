@@ -87,6 +87,14 @@ for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
   });
 }
 
+/** 持久化浏览器 profile：登录态与设备指纹留在本地，跨次启动不再被知乎当新设备 */
+const PROFILE_ROOT = path.join(
+  process.env.LOCALAPPDATA || os.tmpdir(), 'qmd2any', 'browser-profiles'
+);
+/** 与既有保存 cookie 同源的 UA，保证指纹连续性 */
+const CONTEXT_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
 async function getBrowser(headless) {
   const { chromium } = require('playwright-core');
 
@@ -102,25 +110,25 @@ async function getBrowser(headless) {
     await browser.close().catch(() => {});
   } catch (_) { /* 没开着，往下新开 */ }
 
-  // ② 新开一个
+  // ② 新开一个：用持久化 profile，登录一次后续启动天然保持登录态
   const executablePath = findChromium();
   if (!executablePath) { out('NEED_INSTALL'); process.exit(2); }
-  const browser = await chromium.launch({
+  const userDataDir = path.join(PROFILE_ROOT, platform || 'default');
+  fs.mkdirSync(userDataDir, { recursive: true });
+  const context = await chromium.launchPersistentContext(userDataDir, {
     executablePath,
     headless: !!headless,
+    viewport: { width: 1400, height: 950 },
+    userAgent: CONTEXT_USER_AGENT,
     args: [
       '--no-sandbox', '--disable-dev-shm-usage', '--disable-blink-features=AutomationControlled',
       `--remote-debugging-port=${CDP_PORT[platform] || 9225}`,   // 开调试端口，供复用/续传
     ],
   });
-  const context = await browser.newContext({
-    viewport: { width: 1400, height: 950 },
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  });
   // 知乎发布要往剪贴板写 HTML 再粘进编辑器，需要剪贴板权限
   await context.grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {});
-  _browser = browser; _ownsBrowser = true;   // 我们开的，退出时负责关掉
-  return { browser, context, reused: false };
+  _browser = context.browser() || context; _ownsBrowser = true;   // 我们开的，退出时负责关掉
+  return { browser: _browser, context, reused: false };
 }
 
 /** 复用 context 里已有的标签页，没有才新开 —— 避免开出一堆 tab */
@@ -839,7 +847,28 @@ async function publishZhihu(page, def, { title, html, images, mode }) {
   await page.goto(def.publishUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
 
-  if (def.loginUrlPattern.test(page.url())) throw new Error('知乎 cookie 已失效，请重新登录');
+  if (def.loginUrlPattern.test(page.url())) {
+    // 登录态失效不再直接抛错挂死：原地等用户扫码，成功后自动继续填文章
+    info('⚠️ 知乎登录态已失效，请在弹出的浏览器窗口中完成登录（扫码/验证码/密码均可）…');
+    step(0, totalSteps, '等待知乎登录');
+    const deadline = Date.now() + 5 * 60 * 1000;
+    let loggedIn = false;
+    while (Date.now() < deadline) {
+      if (page.isClosed()) throw new Error('浏览器窗口被关闭，发布中止');
+      let url = '';
+      try { url = page.url(); } catch (_) {}
+      if (url && !def.loginUrlPattern.test(url)) { loggedIn = true; break; }
+      await page.waitForTimeout(1500);
+    }
+    if (!loggedIn) throw new Error('等待登录超时（5 分钟），请重新发布');
+    info('检测到登录成功，正在进入写文章页…');
+    await page.goto(def.publishUrl, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
+    if (def.loginUrlPattern.test(page.url())) {
+      await dumpDiag(page, 'login_ok_but_write_blocked');
+      throw new Error('已登录但无法进入写文章页，请重试或手动检查');
+    }
+  }
 
   // ── 标题 ──
   const titleBox = page.locator('textarea[placeholder*="标题"], input[placeholder*="标题"]').first();
