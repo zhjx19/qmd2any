@@ -10,6 +10,7 @@ Compact guide for OpenCode sessions. The authoritative, detailed reference is `C
 - `npm run publish` pushes to VS Code Marketplace (requires publisher auth).
 - Electron: `npm run start:electron`, `npm run build:mac`, `npm run build:mac:universal`.
 - Releases are CI-driven: pushing a `v*` tag runs `.github/workflows/release.yml` (`npm ci && npx vsce package`, Node 20). No manual build step needed for release.
+- **Release order (strict)**: bump version → update README → commit+push → push `v*` tag（GitHub Release）→ 确认 Release 无误后**最后**才 `npm run publish` 发市场。市场说明页取发布时的 README，先发市场会带旧说明。
 
 ## Architecture
 

@@ -17,6 +17,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 There is no test suite in this repository.
 
+### Release order (IMPORTANT — follow strictly)
+
+Marketplace publish must come **LAST**. The required sequence for every release:
+
+1. Bump `version` in package.json
+2. Update README (new-version section + feature table + changelog)
+3. Commit and push to master
+4. Push a `v*` tag → CI builds and publishes the GitHub Release with the `.vsix`
+5. Verify the GitHub Release looks right — **only then** run `npm run publish` (VS Code Marketplace)
+
+Rationale: the marketplace listing snapshots the README at publish time; publishing early ships stale release notes that cannot be tied to a completed GitHub release.
+
 ## Architecture
 
 This is a **dual-target** project: a VS Code extension and a standalone Electron desktop app. Both share the same core conversion library at [lib/converter.js](lib/converter.js).
