@@ -10,6 +10,7 @@ const urlMod = require('url');
 const crypto = require('crypto');
 
 const { renderMarkdown, renderQuarto, buildFullHtml, buildWechatCopyHtml, buildZhihuCopyHtml, buildXhsCopyHtml, convertMarkdownToWeChat, buildXhsRenderHtml } = require('../lib/converter');
+const { hasDiagramHtml, renderViaScript } = require('../lib/diagram/render');
 const { THEMES, DEFAULT_THEME_ID, getTheme } = require('../lib/themes');
 const quarto = require('../lib/quarto');
 
@@ -396,17 +397,34 @@ ipcMain.on('exportHtml', async () => {
 
 // ── Get WeChat HTML ────────────────────────────────────
 
-ipcMain.on('getWechatHtml', () => {
+ipcMain.on('getWechatHtml', async () => {
   try {
     const mdPath = currentFilePath;
     if (!mdPath) {
       sendToRenderer('wechatHtmlError', { message: '请先打开或保存文件' });
       return;
     }
+    const appRoot = path.join(__dirname, '..');
     const { bodyHtml } = renderForPlatform(mdPath);
     const templatePath = getTemplatePath();
     const theme = getTheme(currentThemeId);
-    const html = buildWechatCopyHtml(bodyHtml, templatePath, theme);
+
+    // 图表（mermaid/grViz）：先经子进程渲染成 base64 图片，失败降级保留代码块
+    let finalBody = bodyHtml;
+    if (hasDiagramHtml(bodyHtml)) {
+      console.log('[qmd2any] rendering diagrams for wechat copy...');
+      try {
+        const result = await renderViaScript(appRoot, bodyHtml);
+        finalBody = result.html;
+        if (result.errors && result.errors.length) {
+          console.log('[qmd2any] diagram render errors:', result.errors.join('; '));
+        }
+      } catch (err) {
+        console.log('[qmd2any] diagram render fallback:', err.message);
+      }
+    }
+
+    const html = buildWechatCopyHtml(finalBody, templatePath, theme);
     sendToRenderer('wechatHtml', { html });
   } catch (err) {
     sendToRenderer('wechatHtmlError', { message: err.message });
