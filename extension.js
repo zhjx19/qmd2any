@@ -378,7 +378,13 @@ async function handleWebviewMessage(msg, panel, mdPath) {
     }
 
     case 'zhihuCheckLogin': {
-      const cookieStr = extContext.globalState.get(zhihu.STORAGE_KEY, '');
+      // 发布链路实际使用 rich browserCookies（z_c0），检查必须覆盖两种格式，
+      // 否则只存有新格式 cookie 时面板会一直显示未登录
+      const richCookies = zhihuBrowserCookies();
+      const legacyStr = extContext.globalState.get(zhihu.STORAGE_KEY, '');
+      const cookieStr = richCookies.length
+        ? richCookies.map(c => `${c.name}=${c.value}`).join('; ')
+        : legacyStr;
       if (zhihu.isLoggedIn(cookieStr)) {
         const info = await zhihu.verifyLogin(cookieStr);
         panel.webview.postMessage({ type: 'zhihuLoginStatus', loggedIn: info.valid, name: info.name });
