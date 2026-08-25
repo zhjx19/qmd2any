@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 
 const { renderMarkdown, renderQuarto, buildWechatCopyHtml } = require('./lib/converter');
+const { hasDiagramHtml, renderViaScript } = require('./lib/diagram/render');
 const { THEMES, DEFAULT_THEME_ID, getTheme } = require('./lib/themes');
 const zhihu = require('./lib/zhihu');
 const social = require('./lib/social');
@@ -341,7 +342,26 @@ async function handleWebviewMessage(msg, panel, mdPath) {
         const templatePath = getTemplatePath(workspacePath, templateName);
         const { bodyHtml } = renderForPlatform(mdPath);
         const theme = getTheme(currentThemeId);
-        const html = buildWechatCopyHtml(bodyHtml, templatePath, theme);
+
+        // 图表（mermaid/grViz）：先经子进程渲染成 base64 图片，失败降级保留代码块
+        let finalBody = bodyHtml;
+        if (hasDiagramHtml(bodyHtml)) {
+          try {
+            const result = await vscode.window.withProgress(
+              { location: vscode.ProgressLocation.Notification, title: 'qmd2any: 正在渲染流程图为图片…' },
+              () => renderViaScript(extContext.extensionUri.fsPath, bodyHtml)
+            );
+            finalBody = result.html;
+            if (result.errors && result.errors.length) {
+              vscode.window.showWarningMessage(`有 ${result.errors.length} 个流程图渲染失败，已保留源码块`);
+            }
+          } catch (err) {
+            log(`流程图渲染降级为代码块: ${err.message}`);
+            vscode.window.showWarningMessage(`流程图渲染失败（${err.message}），已保留源码块`);
+          }
+        }
+
+        const html = buildWechatCopyHtml(finalBody, templatePath, theme);
         panel.webview.postMessage({ type: 'wechatHtml', html });
       } catch (err) {
         log(`buildWechatCopyHtml 失败: ${err.message}`);
