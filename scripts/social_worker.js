@@ -22,6 +22,7 @@
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
+const { findChromium, renderDiagrams } = require('../lib/diagram/render');
 
 const argv = process.argv.slice(2);
 const cmd      = argv[0];
@@ -32,34 +33,6 @@ function info(m)   { out('INFO:' + m); }
 function fail(m)   { out('ERROR:' + m); process.exit(1); }
 /** 结构化进度：PROGRESS:<done>/<total>:<label> */
 function step(done, total, label) { out(`PROGRESS:${done}/${total}:${label}`); }
-
-// ─── 查找 Chromium ──────────────────────────────────────────────────────────
-function findChromium() {
-  const home = os.homedir();
-  const cacheDir = path.join(home, '.cache', 'ms-playwright');
-  if (fs.existsSync(cacheDir)) {
-    for (const entry of fs.readdirSync(cacheDir).filter(e => e.startsWith('chromium'))) {
-      const cands = {
-        darwin: path.join(cacheDir, entry, 'chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
-        linux:  path.join(cacheDir, entry, 'chrome-linux', 'chrome'),
-        win32:  path.join(cacheDir, entry, 'chrome-win', 'chrome.exe'),
-      };
-      const p = cands[process.platform];
-      if (p && fs.existsSync(p)) return p;
-    }
-  }
-  const system = {
-    darwin: [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-    ],
-    linux:  ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium-browser', '/usr/bin/chromium'],
-    win32:  ['C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'],
-  };
-  for (const p of (system[process.platform] || [])) if (fs.existsSync(p)) return p;
-  return null;
-}
 
 // ─── 平台定义 ───────────────────────────────────────────────────────────────
 // 关键修复：小红书创作平台签发的是 creator 专属 cookie，不叫 web_session。
@@ -885,8 +858,9 @@ async function publishZhihu(page, def, { title, html, images, mode }) {
   // 不再依赖 localhost 图床，也不再调用失效的知乎图片 API。
   // 流程：粘贴一段正文 → 通过知乎自己的文件上传控件插入对应本地图片 → 继续下一段。
   step(1, totalSteps, '准备图片和正文片段');
-  const parts = splitHtmlByImageTags(html);
-  const imageFiles = images || [];
+  const { html: cleanHtml, images: renderedImages } = await renderDiagrams(page, html, images || []);
+  const parts = splitHtmlByImageTags(cleanHtml);
+  const imageFiles = renderedImages;
   info(`正文拆成 ${parts.segments.length} 段，HTML 图片 ${parts.imageCount} 张，本地图片 ${imageFiles.length} 张`);
   if (parts.imageCount !== imageFiles.length) {
     info(`⚠️ HTML 图片数 (${parts.imageCount}) 与本地图片数 (${imageFiles.length}) 不一致，图片顺序可能错位`);
@@ -961,14 +935,27 @@ function composeText(body, tags, link, limit, hashInline, weighted) {
 }
 
 // ─── 入口 ───────────────────────────────────────────────────────────────────
-(async () => {
-  try {
-    if (cmd === 'login')        await doLogin(argv[2]);
-    else if (cmd === 'login-publish') await doLoginAndPublish(argv[2], argv[3]);
-    else if (cmd === 'publish') await doPublish(argv[2], false);
-    else if (cmd === 'resume')  await doPublish(argv[2], true);
-    else fail('未知子命令：' + cmd);
-  } catch (e) {
-    fail(e.message);
-  }
-})();
+if (require.main === module) {
+  (async () => {
+    try {
+      if (cmd === 'login')        await doLogin(argv[2]);
+      else if (cmd === 'login-publish') await doLoginAndPublish(argv[2], argv[3]);
+      else if (cmd === 'publish') await doPublish(argv[2], false);
+      else if (cmd === 'resume')  await doPublish(argv[2], true);
+      else fail('未知子命令：' + cmd);
+    } catch (e) {
+      fail(e.message);
+    }
+  })();
+}
+
+// 供测试/复用：按真实发布流程调用（作为子进程 spawn 时 require.main !== module 不会执行入口）。
+module.exports = {
+  getBrowser,
+  renderDiagrams,
+  splitHtmlByImageTags,
+  publishZhihu,
+  uploadZhihuImageAtEnd,
+  PLATFORMS,
+  CDP_PORT,
+};
