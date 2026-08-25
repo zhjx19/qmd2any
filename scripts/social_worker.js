@@ -267,13 +267,25 @@ async function doPublish(jobFile, resume) {
 
   // 复用已开着的窗口（登录时开的那个也会被复用），没有才新开
   const { browser, context, reused } = await getBrowser(headless);
-  // 无论新开还是复用，都注入一次存好的 cookie，保证用的是当前登录态
+  // Cookie 注入策略：持久化 profile 里可能已存有【更新鲜】的登录态（用户最近扫码所得），
+  // 盲目注入旧 cookie 会把新会话覆盖回死值。因此：上下文里已有有效登录 cookie 时跳过注入。
+  let needInject = (cookies || []).length > 0;
   try {
-    await context.addCookies(normalizeCookies(cookies, def));
-    info(`已注入 ${cookies.length} 条 cookie`);
-  } catch (e) {
-    info(`⚠️ Cookie 注入失败：${e.message}`);
-    // 不中断流程：可能是部分 cookie 格式问题，剩余的有效 cookie 已在上下文中
+    const existing = await context.cookies();
+    const hasAuth = existing.some(c => def.authCookies.includes(c.name) && c.value && c.value.length > 5);
+    if (hasAuth) {
+      needInject = false;
+      info('检测到浏览器已有本地登录态，跳过 cookie 注入');
+    }
+  } catch (_) { /* 读不到就按原逻辑注入 */ }
+  if (needInject) {
+    try {
+      await context.addCookies(normalizeCookies(cookies, def));
+      info(`已注入 ${cookies.length} 条 cookie`);
+    } catch (e) {
+      info(`⚠️ Cookie 注入失败：${e.message}`);
+      // 不中断流程：可能是部分 cookie 格式问题，剩余的有效 cookie 已在上下文中
+    }
   }
   if (resume && reused) info('已重连到原窗口，从断点继续…');
 
