@@ -17,7 +17,8 @@
 
 const fs   = require('fs');
 const path = require('path');
-const os   = require('os');
+
+const { findChromium } = require('../lib/diagram/render');
 
 // ── 解析 CLI 参数 ────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
@@ -37,51 +38,6 @@ const bg      = flag('--bg', '#ffffff');
 if (!htmlFile || !outputDir) {
   process.stderr.write('Usage: node xhs_screenshot.js <html_file> <output_dir> [--width N] [--height N] [--padding N] [--bg COLOR]\n');
   process.exit(1);
-}
-
-// ── 查找 Chromium 可执行文件 ─────────────────────────────────────────────────
-function findChromium() {
-  const home = os.homedir();
-
-  // 1. Playwright 管理的 Chromium（python playwright / node playwright 共用缓存）
-  const cacheDir = path.join(home, '.cache', 'ms-playwright');
-  if (fs.existsSync(cacheDir)) {
-    const entries = fs.readdirSync(cacheDir).filter(e => e.startsWith('chromium'));
-    for (const entry of entries) {
-      const candidates = {
-        darwin: path.join(cacheDir, entry, 'chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
-        linux:  path.join(cacheDir, entry, 'chrome-linux', 'chrome'),
-        win32:  path.join(cacheDir, entry, 'chrome-win', 'chrome.exe'),
-      };
-      const p = candidates[process.platform];
-      if (p && fs.existsSync(p)) return p;
-    }
-  }
-
-  // 2. 系统已安装的浏览器
-  const system = {
-    darwin: [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-      '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
-    ],
-    linux: [
-      '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable',
-      '/usr/bin/chromium-browser', '/usr/bin/chromium',
-      '/snap/bin/chromium',
-    ],
-    win32: [
-      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    ],
-  };
-  for (const p of (system[process.platform] || [])) {
-    if (fs.existsSync(p)) return p;
-  }
-
-  return null;
 }
 
 // ── 解析颜色 ─────────────────────────────────────────────────────────────────
