@@ -24,6 +24,22 @@ function isCompilableFile(filePath) {
 }
 
 /**
+ * 打包环境下 asar 内的脚本文件不可被子进程执行，
+ * 解析到 app.asar.unpacked 的真实路径（开发环境即仓库根目录）。
+ */
+function unpackedAppRoot() {
+  if (__dirname.includes('app.asar')) {
+    return path.join(__dirname.replace('app.asar', 'app.asar.unpacked'), '..');
+  }
+  return path.join(__dirname, '..');
+}
+
+/** @param {string} name scripts/ 下的文件名 @returns {string} 可被子进程执行的真实脚本路径 */
+function unpackedScript(name) {
+  return path.join(unpackedAppRoot(), 'scripts', name);
+}
+
+/**
  * Render markdown or quarto file, returning { bodyHtml, title, rawMarkdown }.
  * For .qmd files, requires prior compilation (checks cache).
  */
@@ -404,13 +420,13 @@ ipcMain.on('getWechatHtml', async () => {
       sendToRenderer('wechatHtmlError', { message: '请先打开或保存文件' });
       return;
     }
-    const appRoot = path.join(__dirname, '..');
+    // 打包时 render_diagrams.js 位于 app.asar.unpacked，须传解包后的根目录
+    const appRoot = unpackedAppRoot();
     const { bodyHtml } = renderForPlatform(mdPath);
     const templatePath = getTemplatePath();
     const theme = getTheme(currentThemeId);
 
     // 图表（mermaid/grViz）：先经子进程渲染成 base64 图片，失败降级保留代码块
-    let finalBody = bodyHtml;
     if (hasDiagramHtml(bodyHtml)) {
       console.log('[qmd2any] rendering diagrams for wechat copy...');
       try {
@@ -553,7 +569,6 @@ ipcMain.on('generateXhsViaPython', async (_event, msg) => {
 
   const { spawn } = require('child_process');
   const { width = 1080, height = 1440, padding = 40, bg = '#ffffff', autoExport = false } = msg;
-  const appRoot = path.join(__dirname, '..');
 
   // Generate standalone render HTML
   const { bodyHtml } = renderForPlatform(currentFilePath);
@@ -568,7 +583,7 @@ ipcMain.on('generateXhsViaPython', async (_event, msg) => {
 
   fs.writeFileSync(tmpHtml, htmlContent, 'utf8');
 
-  const scriptPath = path.join(appRoot, 'scripts', 'xhs_screenshot.js');
+  const scriptPath = unpackedScript('xhs_screenshot.js');
 
   function runScreenshot(retryAfterInstall) {
     sendToRenderer('xhsPythonProgress', { message: '⏳ 渲染中，请稍候...' });

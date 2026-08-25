@@ -28,3 +28,4 @@ extraMetadata:
 asar: true
 asarUnpack:
   - scripts/xhs_screenshot.js
+  - scripts/render_diagrams.js

@@ -21,7 +21,7 @@ async function main() {
     process.exit(1);
   }
 
-  const input = JSON.parse(fs.readFileSync(inFile, 'utf8'));
+  const input = JSON.parse(fs.readFileSync(inFile, 'utf8').replace(/^\uFEFF/, ''));
   const html = String(input.html || '');
   if (!hasDiagramHtml(html)) {
     fs.writeFileSync(outFile, JSON.stringify({ html, rendered: 0, errors: [] }), 'utf8');
