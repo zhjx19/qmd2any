@@ -80,3 +80,8 @@ node_modules/ali-oss/
 # ── 小红书截图已移除 ─────────────────────────────────────────────────────────
 node_modules/html2canvas/
 node_modules/pngjs/
+
+# ���� ���ؿ��������ļ���������� ����
+.superpowers/
+.claude/
+*.log
