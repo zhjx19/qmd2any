@@ -1,4 +1,4 @@
-# QMD2Any — Quarto / Markdown / R Markdown / Notebook 一键导出公众号 & 知乎
+# QMD2Any — Quarto / Markdown / R Markdown / Notebook 一键发布公众号 & 知乎
 
 [![VS Code Marketplace](https://img.shields.io/badge/VS%20Code-Install-2d7a3e?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=ZhangJingxin.qmd2any)
 [![GitHub Release](https://img.shields.io/github/v/release/zhjx19/qmd2any?logo=github&label=Release)](https://github.com/zhjx19/qmd2any/releases/latest)
@@ -20,6 +20,14 @@
 - **知乎发布功能**使用 Playwright 浏览器自动化方案，你的 Cookie 仅存储在本地 VS Code 存储中，不会上传至任何服务器。
 - 请遵守各平台（微信公众号、知乎）的使用条款，勿用于发布违规内容。
 - 本项目作者对因使用本工具产生的任何后果不承担责任。
+
+---
+
+## 🆕 v2.3.4 更新
+
+| 功能 | 说明 |
+|------|------|
+| ✏️ **品牌文案更正** | 市场标题与描述统一为「一键**发布**公众号/知乎」（原「一键导出微信/知乎」） |
 
 ---
 
@@ -244,6 +252,10 @@ social.publish() → Playwright 浏览器自动化
 ---
 
 ## 版本历史
+
+### v2.3.4
+
+- **修正**：市场标题与描述统一为「一键发布公众号/知乎」，不再使用「一键导出微信/知乎」
 
 ### v2.3.3
 
