@@ -26,6 +26,8 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: '*.vsix'
+          # 重跑 / 重推同名 tag 时覆盖旧 asset，否则 API 报 already_exists
+          overwrite_files: true
 
   # 发市场。needs: build —— 打包失败就不会发出去。
   # 凭证：仓库 Settings > Secrets and variables > Actions > New repository secret
