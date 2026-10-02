@@ -1,9 +1,12 @@
 name: Release
+
 on:
   push:
     tags: ['v*']
 
 jobs:
+  # 打包 + 建 GitHub Release，并把 .vsix 作为 artifact 传给 publish job。
+  # 只构建一次：市场拿到的字节与 Release 页面上的完全一致。
   build:
     runs-on: ubuntu-latest
     permissions:
@@ -15,6 +18,47 @@ jobs:
           node-version: '20'
       - run: npm ci
       - run: npx vsce package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: '*.vsix'
+          if-no-files-found: error
       - uses: softprops/action-gh-release@v2
         with:
           files: '*.vsix'
+
+  # 发市场。needs: build —— 打包失败就不会发出去。
+  # 凭证：仓库 Settings > Secrets and variables > Actions > New repository secret
+  #       name = VSCE_PAT，value = Azure DevOps 的 PAT
+  #       （Organization 选 All accessible organizations，Scopes 勾 Marketplace:Manage）
+  publish:
+    name: Publish to VS Code Marketplace
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+
+      # 缺 secret 时给出可操作的报错，而不是让 vsce 抛一堆看不懂的鉴权错误
+      - name: Check VSCE_PAT secret
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::error::Repository secret VSCE_PAT is not set. Add it under Settings > Secrets and variables > Actions, then re-run this workflow."
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+          path: .
+
+      # --packagePath 直接发布 build job 产出的那个 vsix，不重新打包
+      - name: Publish
+        run: npx vsce publish --packagePath ./*.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
