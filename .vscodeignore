@@ -17,6 +17,15 @@
 test.md
 test_xhs/
 
+# ── 开发期一次性脚本 / 目录（别打进 vsix）──────────────────────────────────────
+# 根目录只有一个运行时 .js（extension.js），所以 check-*/verify-*/debug* 都是临时脚本。
+# 真实踩过：排查凭证存储用的 check-pat.js 忘了删，被 vsce 打进已发布的 2.3.5 包。
+tmp*/
+scratch/
+check-*.js
+verify-*.js
+debug*.js
+
 # ── 构建产物 ──────────────────────────────────────────────────────────────────
 *.vsix
 out/
@@ -81,7 +90,7 @@ node_modules/ali-oss/
 node_modules/html2canvas/
 node_modules/pngjs/
 
-# ���� ���ؿ��������ļ���������� ����
+# ���� ���ؿ��������ļ���������� ����
 .superpowers/
 .claude/
 *.log
