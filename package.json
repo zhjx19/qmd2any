@@ -150,7 +150,10 @@
         },
         "qmd2any.publish.mode": {
           "type": "string",
-          "enum": ["prepare", "auto"],
+          "enum": [
+            "prepare",
+            "auto"
+          ],
           "default": "prepare",
           "enumDescriptions": [
             "填好标题、正文、图片后停在浏览器里，由你自己点「发布」",
@@ -202,8 +205,6 @@
     "build:mac:universal": "electron-builder --mac --universal"
   },
   "devDependencies": {
-    "@vscode/vsce": "^3.9.2",
-    "electron": "^30.0.0",
-    "electron-builder": "^24.13.3"
+    "@vscode/vsce": "^3.9.2"
   }
 }

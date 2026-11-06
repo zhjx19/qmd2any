@@ -8,12 +8,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |---------|-------------|
 | `npm install` | Install dependencies |
 | `npm run package` | Build `.vsix` extension package |
-| `npm run install-ext` | Build `.vsix` and install it locally (`code --install-extension`) |
-| `npm run start:electron` | Launch Electron desktop app in dev mode |
-| `npm run build:mac` | Package macOS `.dmg` (x64) |
-| `npm run build:mac:universal` | Package macOS `.dmg` (Intel + Apple Silicon) |
+| `npm run install-ext` | Build `.vsix` and install it locally (`scripts/install_ext.js` → `positron --install-extension --force`) |
+| `npm run start:electron` | Launch Electron desktop app in dev mode（需先 `npm i -D electron electron-builder`） |
+| `npm run build:mac` | Package macOS `.dmg` (x64)（同上，Electron 依赖按需安装） |
+| `npm run build:mac:universal` | Package macOS `.dmg` (Intel + Apple Silicon)（同上） |
 | `npm run publish` | Publish to VS Code Marketplace |
 | F5 in VS Code | Launch extension debug host |
+| `node scripts/publish_lint.js` | 发布 HTML 门禁：8 夹具 / 20 断言 + 4 条链路检查（含"已安装扩展是否最新源码"） |
+
+> **Electron 构建依赖默认不装**（`electron` + `electron-builder` ≈ 134 MB，只服务桌面客户端）。VS Code / Positron 扩展这条线不需要它们；要打桌面端时再 `npm i -D electron electron-builder`。`vsce` 保留在 devDependencies，本地 `npm run package` / `install-ext` 随时可用。
 
 There is no test suite in this repository.
 

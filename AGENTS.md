@@ -9,6 +9,7 @@ Compact guide for OpenCode sessions. The authoritative, detailed reference is `C
 - `npm run install-ext` builds the `.vsix` and installs it locally.
 - `npm run publish` pushes to VS Code Marketplace (requires publisher auth). **日常发版不需要手动跑它** —— 推 tag 后 CI 自动发（见下）。
 - Electron: `npm run start:electron`, `npm run build:mac`, `npm run build:mac:universal`.
+  **Electron 的构建依赖默认不装**（`electron` / `electron-builder` 合起来 134 MB，只在打桌面客户端时用）。要构建桌面端先跑 `npm i -D electron electron-builder`，装完再执行上面的命令。
 - Releases are CI-driven: pushing a `v*` tag runs `.github/workflows/release.yml` (Node 20). No manual build step needed.
 - **发布链路（自动，2026-10 起）**：`release.yml` 两个 job —— `build` 打包并建 GitHub Release，把 `.vsix` 作为 artifact 传给 `publish`；`publish` 用 `vsce publish --packagePath` 把**同一个** vsix 发到市场（只构建一次，市场与 Release 字节一致）。`needs: build` 保证打包失败就不发布。
 - **一次性配置**：仓库 Settings → Secrets and variables → Actions → New repository secret，`name = VSCE_PAT`，`value = Azure DevOps 的 PAT`。没配的话 `publish` job 会以可操作的报错退出（不会抛 vsce 那种看不懂的鉴权错误）。
