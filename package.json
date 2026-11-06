@@ -2,7 +2,7 @@
   "name": "qmd2any",
   "displayName": "QMD2Any - Quarto 一键发布公众号/知乎",
   "description": "将 Markdown / Quarto (.qmd) / R Markdown (.Rmd) / Notebook (.ipynb) 一键发布到公众号和知乎，支持 LaTeX 公式、代码高亮、6 套主题、实时预览、Quarto 编译集成",
-  "version": "2.3.5",
+  "version": "2.3.6",
   "publisher": "ZhangJingxin",
   "license": "MIT",
   "icon": "icon.png",
@@ -147,6 +147,36 @@
           "type": "string",
           "default": "build",
           "description": "导出 HTML 的目录（相对于工作区根目录）"
+        },
+        "qmd2any.publish.mode": {
+          "type": "string",
+          "enum": ["prepare", "auto"],
+          "default": "prepare",
+          "enumDescriptions": [
+            "填好标题、正文、图片后停在浏览器里，由你自己点「发布」",
+            "自动点「发布」按钮"
+          ],
+          "description": "知乎发布模式"
+        },
+        "qmd2any.numberHeadings": {
+          "type": "boolean",
+          "default": true,
+          "description": "发布时给标题自动编号：最高级标题记 1、2、3，下一级记 1.1、1.2，更深的继续降级（1.1.1）。编号写进标题文本，因为知乎/微信都不支持 CSS 计数器。"
+        },
+        "qmd2any.deepseek.apiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "DeepSeek API Key，用于生成公众号摘要。**明文保存在本机 VS Code 设置里**，不要提交到仓库。"
+        },
+        "qmd2any.deepseek.model": {
+          "type": "string",
+          "default": "deepseek-flash",
+          "description": "生成摘要用的模型名"
+        },
+        "qmd2any.deepseek.baseUrl": {
+          "type": "string",
+          "default": "https://api.deepseek.com",
+          "description": "DeepSeek API 地址（走代理或兼容网关时改这里）"
         }
       }
     }
@@ -165,7 +195,7 @@
   },
   "scripts": {
     "package": "vsce package",
-    "install-ext": "vsce package && code --install-extension \"qmd2any-$(node -p \"require('./package.json').version\").vsix\"",
+    "install-ext": "vsce package && node scripts/install_ext.js",
     "publish": "vsce publish",
     "start:electron": "electron ./electron/main.js",
     "build:mac": "electron-builder --mac",

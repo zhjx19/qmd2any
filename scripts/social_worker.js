@@ -715,17 +715,43 @@ function startImageServer(images) {
 
 function splitHtmlByImageTags(html) {
   const segments = [];
+  const captions = [];                 // 与图片一一对应：md 里 ![说明](...) 的说明
   const re = /<p>\s*<img\b[^>]*src=["']data:image[^"']*["'][^>]*>\s*<\/p>|<img\b[^>]*src=["']data:image[^"']*["'][^>]*>/gi;
   let last = 0;
   let count = 0;
   let m;
   while ((m = re.exec(html)) !== null) {
     segments.push(html.slice(last, m.index));
+    captions.push(extractImgCaption(m[0]));
     last = m.index + m[0].length;
     count++;
   }
   segments.push(html.slice(last));
-  return { segments, imageCount: count };
+  return { segments, imageCount: count, captions };
+}
+
+/** 解 HTML 实体（data-caption 是属性值，&amp; &quot; 之类要先还原） */
+function decodeHtmlEntities(str) {
+  return String(str == null ? '' : str)
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+/** 纯文本 → HTML 文本节点（用于把说明降级成正文段落时） */
+function escapeHtmlText(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/** 从单个 <img ...> 标签里取 data-caption（没有则空串） */
+function extractImgCaption(imgTagHtml) {
+  const m = /data-caption\s*=\s*(["'])([\s\S]*?)\1/i.exec(imgTagHtml);
+  return m ? decodeHtmlEntities(m[2]).trim() : '';
 }
 
 async function focusEditorEnd(editor) {
@@ -853,6 +879,130 @@ async function uploadZhihuImageAtEnd(page, editor, file, index) {
   info(`图片 ${index + 1} 上传完成，弹窗已关闭`);
 }
 
+// ─── 知乎图片标题（图片块下面的 figcaption.Image-caption 那一行）────────────────
+// md 里 ![分页导出](x.png) 的说明，老版本被 buildPublishHtml 摊成了正文里的 <p>，
+// 结果知乎的图片标题永远是空的。现在说明跟着 <img data-caption> 走到这里，
+// 全部插图完成后再逐张打开图注行写回（机制见 setZhihuImageCaption 注释）。
+const IMG_CAPTION_SEL = 'figcaption[class*="Image-caption"]';
+/** 知乎图注行的占位文字（不同版本措辞略有差异，别写死成整句） */
+const CAPTION_PLACEHOLDER = /添加图片(注释|说明|描述)|不超过\s*140\s*字|（可选）/g;
+
+/**
+ * 诊断用：把最后一张图片块附近的真实 DOM 打出来。
+ * 知乎编辑器结构一变，选择器就失效，日志里没有结构就只能靠猜，所以失败分支一律带上这段。
+ */
+async function dumpZhihuImageBlock(page) {
+  try {
+    const notes = await page.evaluate((sel) => {
+      const ed = document.querySelector('.public-DraftEditor-content, div[contenteditable="true"]');
+      if (!ed) return { error: '未找到编辑器' };
+      const imgs = Array.from(ed.querySelectorAll('img'));
+      if (!imgs.length) return { error: '编辑器里没有 img' };
+      const img = imgs[imgs.length - 1];
+      const host = img.parentElement && img.parentElement.parentElement
+        ? img.parentElement.parentElement
+        : img.parentElement;
+      const caps = Array.from(document.querySelectorAll(sel));
+      return {
+        imgCount: imgs.length,
+        capCount: caps.length,
+        capTexts: caps.map(c => (c.textContent || '').slice(0, 20)),
+        blockHtml: (host ? host.outerHTML : img.outerHTML).slice(0, 900),
+      };
+    }, IMG_CAPTION_SEL).catch(e => ({ error: e.message }));
+
+    if (notes.error) return `诊断失败：${notes.error}`;
+    return `编辑器 img ${notes.imgCount} 张，图注行 ${notes.capCount} 行 ${JSON.stringify(notes.capTexts)}，最后一张图片块：${notes.blockHtml}`;
+  } catch (e) {
+    return `诊断失败：${e.message}`;
+  }
+}
+
+/**
+ * 找属于「第 imageIdx 张已落位图片」的图注行下标。
+ *
+ * 只认已经落位的图片（src 不是 blob:）—— 知乎插图后先放一个
+ * `<img class="Editable-imageUploader-image" src="blob:...">` 占位，
+ * 传完才换成 zhimg 地址并连带渲染出图注行；把占位算进来就会配错行。
+ */
+async function zhihuCaptionRowIndexForImage(page, imageIdx) {
+  return page.evaluate(({ sel, idx }) => {
+    const ed = document.querySelector('.public-DraftEditor-content, div[contenteditable="true"]');
+    if (!ed) return -1;
+    const imgs = Array.from(ed.querySelectorAll('img'))
+      .filter(im => !/^blob:/i.test(im.getAttribute('src') || ''));
+    const img = imgs[idx];
+    if (!img) return -1;
+    const caps = Array.from(document.querySelectorAll(sel));
+    for (let i = 0; i < caps.length; i++) {
+      if (img.compareDocumentPosition(caps[i]) & Node.DOCUMENT_POSITION_FOLLOWING) return i;
+    }
+    return -1;
+  }, { sel: IMG_CAPTION_SEL, idx: imageIdx }).catch(() => -1);
+}
+
+/** 归一化图注文本：去掉占位文字、残留标点与空白，便于判空和比较 */
+function normalizeCaption(text) {
+  return String(text == null ? '' : text)
+    .replace(CAPTION_PLACEHOLDER, '')
+    .replace(/[\s，,：:。.、]+/g, '');
+}
+
+/**
+ * 把第 imageIdx 张图的说明填进知乎的图片标题行。
+ *
+ * 知乎的真实机制（活体探查所得，别按常识猜）：
+ *   图注行 `<figcaption class="Image-caption">` **本身不可编辑**，点它之后知乎才注入
+ *   `<div class="Image-captionInput"><textarea></div>` 并聚焦，敲的字进 textarea；
+ *   **点图片本体失焦才提交**回 figcaption；按 Escape 是【取消】，值直接丢。
+ *
+ * @returns {Promise<boolean>} true = 说明已落进图片标题；false = 没填（调用方需降级）
+ */
+async function setZhihuImageCaption(page, caption, imageIdx, timeoutMs = 30000) {
+  let rowIdx = -1;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    rowIdx = await zhihuCaptionRowIndexForImage(page, imageIdx);
+    if (rowIdx >= 0) break;
+    await page.waitForTimeout(500);
+  }
+  if (rowIdx < 0) {
+    info(`图片 ${imageIdx + 1} ${Math.round(timeoutMs / 1000)}s 内没等到对应图注行。${await dumpZhihuImageBlock(page)}`);
+    return false;
+  }
+
+  const existing = normalizeCaption(await page.locator(IMG_CAPTION_SEL).nth(rowIdx).textContent().catch(() => ''));
+  if (existing) {
+    info(`图片 ${imageIdx + 1} 的图注行已有真实内容「${existing.slice(0, 30)}」，不覆盖`);
+    return false;
+  }
+
+  // ① 点开编辑态：知乎注入图注输入框并聚焦
+  await page.locator(IMG_CAPTION_SEL).nth(rowIdx).click({ timeout: 5000 }).catch(() => {});
+  const input = page.locator('.Image-captionInput textarea, .Image-captionInput input').last();
+  const appeared = await input.waitFor({ state: 'attached', timeout: 5000 }).then(() => true).catch(() => false);
+  if (!appeared) {
+    info(`图片 ${imageIdx + 1} 点开后没出现图注输入框。${await dumpZhihuImageBlock(page)}`);
+    return false;
+  }
+  await input.fill(caption).catch(() => {});
+
+  // ② 点同一条图片块失焦 = 提交（Escape 是取消，千万别用）
+  await page.locator('.public-DraftEditor-content img, div[contenteditable="true"] img').last()
+    .click({ timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(400);
+
+  // ③ 校验
+  const got = normalizeCaption(await page.locator(IMG_CAPTION_SEL).nth(rowIdx).textContent().catch(() => ''));
+  const want = normalizeCaption(caption);
+  const filled = got === want;
+  if (!filled) {
+    info(`图片 ${imageIdx + 1} 说明提交后不一致（图注行读到「${got.slice(0, 30)}」，期望「${want.slice(0, 30)}」）。${await dumpZhihuImageBlock(page)}`);
+  }
+  return filled;
+}
+
+
 async function publishZhihu(page, def, { title, html, images, mode }) {
   const totalSteps = 4;
   step(0, totalSteps, '打开知乎写文章页');
@@ -887,7 +1037,12 @@ async function publishZhihu(page, def, { title, html, images, mode }) {
   await titleBox.waitFor({ state: 'visible', timeout: 40000 })
     .catch(() => { throw new Error('未找到标题输入框（页面结构可能已变化）'); });
   await titleBox.click();
-  await titleBox.fill(String(title || '').slice(0, 100));
+  // 不静默截断：超限交给上层报错，用户自己改（老代码 slice(0,100) 会把标题尾巴吃掉还不提示）
+  const safeTitle = String(title || '');
+  if ([...safeTitle].length > 100) {
+    throw new Error(`标题 ${[...safeTitle].length} 字，超过知乎上限 100 字，请精简后重发`);
+  }
+  await titleBox.fill(safeTitle);
   info('已填标题');
 
   // ── 正文编辑器 ──
@@ -902,7 +1057,7 @@ async function publishZhihu(page, def, { title, html, images, mode }) {
   const { html: cleanHtml, images: renderedImages } = await renderDiagrams(page, html, images || []);
   const parts = splitHtmlByImageTags(cleanHtml);
   const imageFiles = renderedImages;
-  info(`正文拆成 ${parts.segments.length} 段，HTML 图片 ${parts.imageCount} 张，本地图片 ${imageFiles.length} 张`);
+  info(`正文拆成 ${parts.segments.length} 段，HTML 图片 ${parts.imageCount} 张（带说明 ${parts.captions.filter(Boolean).length} 张），本地图片 ${imageFiles.length} 张`);
   if (parts.imageCount !== imageFiles.length) {
     info(`⚠️ HTML 图片数 (${parts.imageCount}) 与本地图片数 (${imageFiles.length}) 不一致，图片顺序可能错位`);
     if (imageFiles.length < parts.imageCount) {
@@ -913,9 +1068,12 @@ async function publishZhihu(page, def, { title, html, images, mode }) {
   }
 
   // ── ③ 分段粘贴 + 文件上传 ──
+  // 图片说明不在插图时填：知乎的图片块是异步落位的（插完还是 blob 占位 + 「图片上传中」，
+  // 传完才渲染出图注行），逐张插完立刻填会踩空。留到 ③.5 全部插完再统一回填。
   step(2, totalSteps, '分段粘贴正文并上传图片');
   let imageIdx = 0;
   let expectedPlain = '';
+  const pendingCaptions = [];
   for (let i = 0; i < parts.segments.length; i++) {
     const seg = parts.segments[i];
     if (seg && seg.replace(/<[^>]+>/g, '').trim()) {
@@ -927,6 +1085,10 @@ async function publishZhihu(page, def, { title, html, images, mode }) {
     if (i < parts.imageCount && imageIdx < imageFiles.length) {
       step(2, totalSteps, `上传图片 ${imageIdx + 1}/${Math.min(parts.imageCount, imageFiles.length)}`);
       await uploadZhihuImageAtEnd(page, editor, imageFiles[imageIdx], imageIdx);
+
+      const caption = (parts.captions[imageIdx] || '').trim();
+      if (caption) pendingCaptions.push({ imageIdx, caption });
+
       imageIdx++;
       await page.waitForTimeout(1200);
     }
@@ -938,6 +1100,23 @@ async function publishZhihu(page, def, { title, html, images, mode }) {
   if (got.trim().length < Math.min(40, plain.length * 0.25)) {
     await dumpDiag(page, 'zhihu_paste_failed');
     throw new Error(`正文没能填进编辑器（只有 ${got.trim().length} 字，预期约 ${plain.length} 字）`);
+  }
+
+  // ── ③.5 回填知乎图片标题 ──
+  // 此时所有图都已插完并落位，图注行齐了，按图片位置逐张配对回填。
+  // 填不进去就降级成正文段落（保证说明文字不丢），并留日志。
+  if (pendingCaptions.length) {
+    step(2, totalSteps, '回填图片标题');
+    for (const { imageIdx: idx, caption } of pendingCaptions) {
+      const filled = await setZhihuImageCaption(page, caption, idx).catch(() => false);
+      if (filled) {
+        info(`图片 ${idx + 1} 说明已填入知乎「图片标题」：${caption}`);
+      } else {
+        await pasteHtmlAtEnd(page, editor, `<p>${escapeHtmlText(caption)}</p>`);
+        info(`⚠️ 图片 ${idx + 1} 说明未能填入知乎「图片标题」，已降级为正文段落：${caption}`);
+      }
+      await page.waitForTimeout(300);
+    }
   }
 
   const imgCount = await editor.evaluate(el => el.querySelectorAll('img').length).catch(() => 0);

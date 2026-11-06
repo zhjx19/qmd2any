@@ -26,6 +26,11 @@ check-*.js
 verify-*.js
 debug*.js
 
+# ── 知乎发布格式门禁（开发期校验，运行时不需要）─────────────────────────────────
+fixtures/
+scripts/publish_lint.js
+scripts/install_ext.js
+
 # ── 构建产物 ──────────────────────────────────────────────────────────────────
 *.vsix
 out/

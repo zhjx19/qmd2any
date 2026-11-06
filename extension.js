@@ -10,6 +10,7 @@ const { THEMES, DEFAULT_THEME_ID, getTheme } = require('./lib/themes');
 const zhihu = require('./lib/zhihu');
 const social = require('./lib/social');
 const quarto = require('./lib/quarto');
+const digest = require('./lib/digest');
 
 const COMPILABLE_EXTENSIONS = ['.qmd', '.ipynb', '.Rmd'];
 
@@ -88,17 +89,19 @@ function log(msg) {
  * 对 .qmd 文件会检查编译缓存，未编译则抛错。
  *
  * @param {string} filePath  — .md 或 .qmd 路径
+ * @param {{ footnoteMode?: 'zhihu'|'visible' }} [options]
+ *        footnoteMode 决定脚注形态：知乎藏进 data-text（气泡），其他平台落成可见注释列表
  * @returns {{ bodyHtml: string, title: string, rawMarkdown: string }}
  */
-function renderForPlatform(filePath) {
+function renderForPlatform(filePath, options = {}) {
   if (isCompilableFile(filePath)) {
     if (!quarto.isCacheValid(filePath)) {
       throw new Error('请先点击「🔄 编译」用 Quarto 编译文件');
     }
     const cached = quarto.getCached(filePath);
-    return renderQuarto(filePath, cached.mdPath);
+    return renderQuarto(filePath, cached.mdPath, options);
   }
-  return renderMarkdown(filePath);
+  return renderMarkdown(filePath, options);
 }
 
 // ─────────────────────────────────────────────
@@ -340,7 +343,7 @@ async function handleWebviewMessage(msg, panel, mdPath) {
         const cfg = vscode.workspace.getConfiguration('qmd2any');
         const templateName = cfg.get('template', 'wechat');
         const templatePath = getTemplatePath(workspacePath, templateName);
-        const { bodyHtml } = renderForPlatform(mdPath);
+        const { bodyHtml, title } = renderForPlatform(mdPath, { footnoteMode: 'visible' });
         const theme = getTheme(currentThemeId);
 
         // 图表（mermaid/grViz）：先经子进程渲染成 base64 图片，失败降级保留代码块
@@ -361,11 +364,100 @@ async function handleWebviewMessage(msg, panel, mdPath) {
           }
         }
 
-        const html = buildWechatCopyHtml(finalBody, templatePath, theme);
+        const html = buildWechatCopyHtml(finalBody, templatePath, theme, {
+          title,
+          numberHeadings: cfg.get('numberHeadings', true),
+        });
         panel.webview.postMessage({ type: 'wechatHtml', html });
       } catch (err) {
         log(`buildWechatCopyHtml 失败: ${err.message}`);
         panel.webview.postMessage({ type: 'wechatHtmlError', message: err.message });
+      }
+      break;
+    }
+
+    case 'getAiSettings': {
+      const cfg = vscode.workspace.getConfiguration('qmd2any');
+      const key = String(cfg.get('deepseek.apiKey') || '').trim();
+      panel.webview.postMessage({
+        type: 'aiSettings',
+        model: cfg.get('deepseek.model', 'deepseek-flash'),
+        baseUrl: cfg.get('deepseek.baseUrl', 'https://api.deepseek.com'),
+        hasKey: !!key,
+        // 只回显首尾几位，不把完整 key 送回 webview
+        keyHint: key ? key.slice(0, 3) + '****' + key.slice(-4) : '',
+      });
+      break;
+    }
+
+    case 'saveAiSettings': {
+      try {
+        const cfg = vscode.workspace.getConfiguration('qmd2any');
+        const model = String(msg.model || '').trim() || 'deepseek-flash';
+        const baseUrl = String(msg.baseUrl || '').trim() || 'https://api.deepseek.com';
+        // 写用户级设置（不进工作区、不会被 git 跟踪）；Key 留空表示不修改
+        await cfg.update('deepseek.model', model, vscode.ConfigurationTarget.Global);
+        await cfg.update('deepseek.baseUrl', baseUrl, vscode.ConfigurationTarget.Global);
+        const apiKey = String(msg.apiKey || '').trim();
+        if (apiKey) await cfg.update('deepseek.apiKey', apiKey, vscode.ConfigurationTarget.Global);
+
+        log(`AI 设置已更新: model=${model} baseUrl=${baseUrl}${apiKey ? '，Key 已更新' : '，Key 未改动'}`);
+        panel.webview.postMessage({ type: 'aiSettingsSaved', ok: true });
+      } catch (err) {
+        log(`保存 AI 设置失败: ${err.message}`);
+        panel.webview.postMessage({ type: 'aiSettingsSaved', ok: false, error: err.message });
+      }
+      break;
+    }
+
+    case 'wechatDigest': {
+      try {
+        const cfg = vscode.workspace.getConfiguration('qmd2any');
+        const apiKey = String(cfg.get('deepseek.apiKey') || '').trim();
+        if (!apiKey) {
+          panel.webview.postMessage({
+            type: 'wechatDigestResult', success: false,
+            error: '没配置 DeepSeek API Key：设置里搜 qmd2any.deepseek.apiKey',
+          });
+          break;
+        }
+
+        const { title, bodyHtml } = renderForPlatform(mdPath, { footnoteMode: 'visible' });
+        const plain = zhihu.plainTextOf(bodyHtml);
+        const cacheKey = digest.digestCacheKey(title, plain);
+        const cache = extContext.globalState.get('qmd2any.digestCache', {});
+
+        if (!msg.force && cache[cacheKey]) {
+          panel.webview.postMessage({
+            type: 'wechatDigestResult', success: true,
+            digest: cache[cacheKey].digest, cached: true, title,
+          });
+          break;
+        }
+
+        panel.webview.postMessage({ type: 'wechatDigestProgress', message: '正在生成摘要…' });
+        const result = await digest.generateDigest({
+          apiKey,
+          baseUrl: cfg.get('deepseek.baseUrl', 'https://api.deepseek.com'),
+          model: cfg.get('deepseek.model', 'deepseek-flash'),
+          title,
+          text: plain,
+        });
+
+        // 只留最近 20 条，避免 globalState 无限膨胀
+        const kept = Object.entries(cache).filter(([k]) => k !== cacheKey).slice(-19);
+        const next = Object.fromEntries(kept);
+        next[cacheKey] = { digest: result.digest, ts: Date.now() };
+        await extContext.globalState.update('qmd2any.digestCache', next);
+
+        log(`摘要生成完成: ${result.digest.length} 字${result.retried ? '（压缩过一次）' : ''}`);
+        panel.webview.postMessage({
+          type: 'wechatDigestResult', success: true,
+          digest: result.digest, cached: false, title,
+        });
+      } catch (err) {
+        log(`摘要生成失败: ${err.message}`);
+        panel.webview.postMessage({ type: 'wechatDigestResult', success: false, error: err.message });
       }
       break;
     }
@@ -470,7 +562,7 @@ async function handleWebviewMessage(msg, panel, mdPath) {
     case 'zhihuPublish': {
       try {
         // 自动获取文章标题
-        const { title: docTitle, bodyHtml } = renderForPlatform(mdPath);
+        const { title: docTitle, bodyHtml } = renderForPlatform(mdPath, { footnoteMode: 'zhihu' });
         const title = (msg.title && msg.title.trim()) || docTitle || '';
         if (!title.trim()) {
           panel.webview.postMessage({ type: 'zhihuPublishResult', success: false, error: '文章标题不能为空' });
@@ -479,7 +571,18 @@ async function handleWebviewMessage(msg, panel, mdPath) {
 
         // 准备发布内容
         const cfg = vscode.workspace.getConfiguration('qmd2any');
-        const cleanHtml = zhihu.buildPublishHtml(bodyHtml);
+        const cleanHtml = zhihu.buildPublishHtml(bodyHtml, {
+          title: title.trim(),
+          numberHeadings: cfg.get('numberHeadings', true),
+        });
+
+        // 长度预检：超限就报错让用户改，不静默截断
+        const limits = zhihu.checkPublishLimits({ title: title.trim(), html: cleanHtml });
+        if (!limits.ok) {
+          log(`知乎发布前置检查未通过: ${limits.problems.join(' / ')}`);
+          panel.webview.postMessage({ type: 'zhihuPublishResult', success: false, error: limits.problems.join('\n') });
+          break;
+        }
         const imageMdPath = isCompilableFile(mdPath)
           ? (quarto.getCached(mdPath) ? quarto.getCached(mdPath).mdPath : mdPath)
           : mdPath;
@@ -565,8 +668,18 @@ async function handleWebviewMessage(msg, panel, mdPath) {
         }
 
         const cfg = vscode.workspace.getConfiguration('qmd2any');
-        const { bodyHtml } = renderForPlatform(mdPath);
-        const cleanHtml = zhihu.buildPublishHtml(bodyHtml);
+        const { bodyHtml } = renderForPlatform(mdPath, { footnoteMode: 'zhihu' });
+        const cleanHtml = zhihu.buildPublishHtml(bodyHtml, {
+          title: String(title || '').trim(),
+          numberHeadings: cfg.get('numberHeadings', true),
+        });
+
+        const limits = zhihu.checkPublishLimits({ title: String(title || '').trim(), html: cleanHtml });
+        if (!limits.ok) {
+          log(`知乎存草稿前置检查未通过: ${limits.problems.join(' / ')}`);
+          panel.webview.postMessage({ type: 'zhihuDraftResult', success: false, error: limits.problems.join('\n') });
+          break;
+        }
         const imageMdPath = isCompilableFile(mdPath)
           ? (quarto.getCached(mdPath) ? quarto.getCached(mdPath).mdPath : mdPath)
           : mdPath;
@@ -817,6 +930,147 @@ function getWebviewHtml(webview, _bodyHtml, mdPath) {
       margin-top: 14px;
     }
     .panel-actions .btn { flex: 1; }
+
+    /* ── 摘要按钮的分裂下拉 ── */
+    .btn-split { position: relative; display: inline-flex; }
+    .btn-split .btn { border-radius: 4px 0 0 4px; }
+    .btn-split .btn-split-caret {
+      border-radius: 0 4px 4px 0;
+      border-left: 1px solid rgba(255, 255, 255, .18);
+      padding-left: 6px;
+      padding-right: 6px;
+    }
+    .dropdown-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      min-width: 200px;
+      background: #252526;
+      border: 1px solid #3c3c3c;
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+      padding: 4px;
+      z-index: 70;
+    }
+    .dropdown-menu[hidden] { display: none; }
+    .dropdown-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      color: #ddd;
+      font-size: 12px;
+      padding: 7px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .dropdown-menu button:hover { background: #094771; color: #fff; }
+
+    /* ── AI 设置弹窗 ── */
+    .modal-mask {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 80;
+    }
+    .modal-mask[hidden] { display: none; }
+    .modal {
+      width: 420px;
+      max-width: calc(100vw - 40px);
+      background: #252526;
+      border: 1px solid #3c3c3c;
+      border-radius: 8px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, .5);
+      padding: 16px 18px 18px;
+    }
+    .modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      color: #eee;
+      margin-bottom: 14px;
+    }
+    .modal-head button {
+      background: none; border: none; color: #888; font-size: 18px;
+      line-height: 1; cursor: pointer; padding: 0 2px;
+    }
+    .modal-head button:hover { color: #fff; }
+    .modal label {
+      display: block;
+      font-size: 11px;
+      color: #999;
+      margin: 12px 0 5px;
+    }
+    .modal input {
+      width: 100%;
+      box-sizing: border-box;
+      background: #1e1e1e;
+      color: #e6e6e6;
+      border: 1px solid #3c3c3c;
+      border-radius: 5px;
+      padding: 7px 9px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .modal input:focus { outline: 1px solid #4fc3f7; }
+    .modal .key-hint { color: #4fc3f7; margin-left: 6px; }
+
+    /* ── 摘要卡片（浮在预览区右下角，粘完公众号回来就能复制）── */
+    .digest-card {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      width: 360px;
+      max-width: calc(100vw - 36px);
+      background: #252526;
+      border: 1px solid #3c3c3c;
+      border-radius: 8px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, .45);
+      padding: 12px 14px 14px;
+      z-index: 60;
+    }
+    .digest-card[hidden] { display: none; }
+    .digest-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #ddd;
+      margin-bottom: 8px;
+    }
+    .digest-count { color: #888; margin-left: 6px; }
+    .digest-count.over { color: #f14c4c; font-weight: 600; }
+    .digest-close {
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0 2px;
+    }
+    .digest-close:hover { color: #fff; }
+    .digest-card textarea {
+      width: 100%;
+      box-sizing: border-box;
+      resize: vertical;
+      background: #1e1e1e;
+      color: #e6e6e6;
+      border: 1px solid #3c3c3c;
+      border-radius: 5px;
+      padding: 8px;
+      font-size: 13px;
+      line-height: 1.6;
+      font-family: inherit;
+    }
+    .digest-card textarea:focus { outline: 1px solid #4fc3f7; }
+    .digest-card .panel-actions { margin-top: 10px; }
+
     .hint {
       font-size: 11px;
       color: #777;
@@ -1083,6 +1337,16 @@ function getWebviewHtml(webview, _bodyHtml, mdPath) {
     <button class="btn btn-primary" id="btn-copy" title="选中并复制预览区域内容，可直接粘贴到微信公众号编辑器">
       📋 复制微信
     </button>
+    <span class="btn-split">
+      <button class="btn btn-secondary" id="btn-digest" title="用 DeepSeek 生成不超过 120 字的公众号摘要">
+        📝 摘要
+      </button>
+      <button class="btn btn-secondary btn-split-caret" id="btn-digest-menu" title="更多摘要选项">▾</button>
+      <div class="dropdown-menu" id="digest-menu" hidden>
+        <button data-digest-act="gen">📝 生成摘要（≤120 字）</button>
+        <button data-digest-act="ai">⚙ AI 设置…</button>
+      </div>
+    </span>
     <button class="btn btn-zhihu-publish" id="btn-zhihu-publish" title="直接发布到知乎专栏（需扫码登录）">
       🚀 发布知乎
     </button>
@@ -1109,6 +1373,40 @@ function getWebviewHtml(webview, _bodyHtml, mdPath) {
     <div class="preview-scroll">
       <div class="article-wrapper" id="preview-content">
         <p style="color:#999;text-align:center;">正在加载预览...</p>
+      </div>
+    </div>
+
+    <!-- 摘要卡片（公众号分享卡片用，≤120 字） -->
+    <div class="digest-card" id="digest-card" hidden>
+      <div class="digest-head">
+        <span>📝 公众号摘要 <span class="digest-count" id="digest-count">0/120</span></span>
+        <button class="digest-close" id="digest-close" title="关闭">×</button>
+      </div>
+      <textarea id="digest-text" rows="3" placeholder="点上方「📝 摘要」生成"></textarea>
+      <div class="panel-actions">
+        <button class="btn btn-primary" id="digest-copy">复制摘要</button>
+        <button class="btn btn-secondary" id="digest-regen">重新生成</button>
+      </div>
+    </div>
+
+    <!-- AI 设置弹窗（DeepSeek） -->
+    <div class="modal-mask" id="ai-settings" hidden>
+      <div class="modal">
+        <div class="modal-head">
+          <span>⚙ AI 设置（DeepSeek，用于生成摘要）</span>
+          <button id="ai-close" title="关闭">×</button>
+        </div>
+        <label>API Key<span class="key-hint" id="ai-key-hint"></span></label>
+        <input type="password" id="ai-key" placeholder="sk-…（留空表示不修改已保存的 Key）" autocomplete="off">
+        <label>模型</label>
+        <input id="ai-model" value="deepseek-flash" autocomplete="off">
+        <label>API 地址</label>
+        <input id="ai-baseurl" value="https://api.deepseek.com" autocomplete="off">
+        <p class="hint">Key 存在本机 VS Code 用户设置里（不进仓库、不同步到工作区）。</p>
+        <div class="panel-actions">
+          <button class="btn btn-primary" id="ai-save">保存</button>
+          <button class="btn btn-secondary" id="ai-cancel">取消</button>
+        </div>
       </div>
     </div>
 
@@ -1393,6 +1691,90 @@ function getWebviewHtml(webview, _bodyHtml, mdPath) {
       vscode.postMessage({ type: 'zhihuPublish', title: currentTitle || '' });
     });
 
+    // ── 公众号摘要（≤120 字，显示在分享卡片上）──
+    const DIGEST_MAX = 120;
+    const digestCard = document.getElementById('digest-card');
+    const digestText = document.getElementById('digest-text');
+    const digestCount = document.getElementById('digest-count');
+
+    function updateDigestCount() {
+      const n = [...digestText.value.trim()].length;
+      digestCount.textContent = n + '/' + DIGEST_MAX;
+      digestCount.classList.toggle('over', n > DIGEST_MAX);
+    }
+
+    document.getElementById('btn-digest').addEventListener('click', () => {
+      vscode.postMessage({ type: 'wechatDigest' });
+    });
+
+    digestText.addEventListener('input', updateDigestCount);
+
+    document.getElementById('digest-close').addEventListener('click', () => {
+      digestCard.hidden = true;
+    });
+
+    document.getElementById('digest-regen').addEventListener('click', () => {
+      vscode.postMessage({ type: 'wechatDigest', force: true });
+    });
+
+    document.getElementById('digest-copy').addEventListener('click', async () => {
+      const text = digestText.value.trim();
+      if (!text) { showToast('摘要还是空的', 'error'); return; }
+      if ([...text].length > DIGEST_MAX) {
+        showToast('摘要 ' + [...text].length + ' 字，超过 ' + DIGEST_MAX + ' 字上限，请删一点', 'error', 3500);
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast('✅ 摘要已复制', 'success');
+      } catch (_) {
+        digestText.select();
+        document.execCommand('copy');
+        showToast('✅ 摘要已复制', 'success');
+      }
+    });
+
+    // 摘要按钮的分裂下拉 + AI 设置弹窗
+    const digestMenu = document.getElementById('digest-menu');
+    const aiModal = document.getElementById('ai-settings');
+
+    document.getElementById('btn-digest-menu').addEventListener('click', (e) => {
+      e.stopPropagation();
+      digestMenu.hidden = !digestMenu.hidden;
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!digestMenu.hidden && !digestMenu.contains(e.target)) digestMenu.hidden = true;
+    });
+
+    digestMenu.addEventListener('click', (e) => {
+      const act = e.target && e.target.getAttribute('data-digest-act');
+      if (!act) return;
+      digestMenu.hidden = true;
+      if (act === 'gen') vscode.postMessage({ type: 'wechatDigest' });
+      if (act === 'ai') {
+        vscode.postMessage({ type: 'getAiSettings' });
+        aiModal.hidden = false;
+      }
+    });
+
+    function closeAiModal() {
+      aiModal.hidden = true;
+      document.getElementById('ai-key').value = '';
+    }
+    document.getElementById('ai-close').addEventListener('click', closeAiModal);
+    document.getElementById('ai-cancel').addEventListener('click', closeAiModal);
+    aiModal.addEventListener('click', (e) => { if (e.target === aiModal) closeAiModal(); });
+
+    document.getElementById('ai-save').addEventListener('click', () => {
+      vscode.postMessage({
+        type: 'saveAiSettings',
+        apiKey: document.getElementById('ai-key').value.trim(),
+        model: document.getElementById('ai-model').value.trim(),
+        baseUrl: document.getElementById('ai-baseurl').value.trim(),
+      });
+    });
+
     // 知乎面板内部事件
 
     // 标签页切换
@@ -1598,6 +1980,39 @@ function getWebviewHtml(webview, _bodyHtml, mdPath) {
           btn.disabled = false;
           btn.textContent = '📋 复制微信';
           showToast('复制失败：' + (msg.message || '未知错误'), 'error');
+          break;
+        }
+        case 'wechatDigestProgress': {
+          showToast(msg.message || '正在生成摘要…', '', 8000);
+          break;
+        }
+        case 'wechatDigestResult': {
+          if (!msg.success) {
+            showToast('摘要生成失败：' + (msg.error || '未知错误'), 'error', 6000);
+            break;
+          }
+          digestText.value = msg.digest || '';
+          updateDigestCount();
+          digestCard.hidden = false;
+          showToast(msg.cached ? '已用缓存的摘要（正文没变）' : '✅ 摘要已生成', 'success');
+          break;
+        }
+        case 'aiSettings': {
+          document.getElementById('ai-model').value = msg.model || 'deepseek-flash';
+          document.getElementById('ai-baseurl').value = msg.baseUrl || 'https://api.deepseek.com';
+          document.getElementById('ai-key').value = '';
+          document.getElementById('ai-key-hint').textContent = msg.hasKey
+            ? '已保存 ' + msg.keyHint + '（留空不改）'
+            : '（还没配置）';
+          break;
+        }
+        case 'aiSettingsSaved': {
+          if (msg.ok) {
+            closeAiModal();
+            showToast('✅ AI 设置已保存', 'success');
+          } else {
+            showToast('保存失败：' + (msg.error || '未知错误'), 'error', 5000);
+          }
           break;
         }
         // ── 知乎发布 ──

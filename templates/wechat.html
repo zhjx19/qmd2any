@@ -25,8 +25,12 @@
         'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB',
         'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif;
       font-size: 16px;
-      margin: 20px 20px;
     }
+
+    /* 列表项不设左右外边距：ul 已经有 padding-left，
+       再给 li 加 20px 会让项目符号和文字之间空一大块，还白白吃掉行宽 */
+    li { margin: 6px 0; }
+    td, th { margin: 0; }
 
     strong {
       font-weight: 600;
@@ -162,6 +166,18 @@
       font-size: 14px;
       color: #c7254e;
     }
+    /* 正文里的行内代码统一走 span（公众号对 <code> 的处理不可控，会把后续文字挤到下一行） */
+    .inline-code {
+      background: #f0f0f0;
+      padding: 0.1em 0.3em;
+      border-radius: 3px;
+      font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+      /* 用 em 而不是 px：标题里的行内代码要跟着标题字号一起放大，
+         写死 14px 会让「4.1 GM(1,N)：GM1N()」里的 GM1N() 比标题小一截 */
+      font-size: 0.92em;
+      color: #c7254e;
+      word-break: break-all;
+    }
 
     /* ── 代码块（macOS 风格） ── */
     pre.mac-code {
@@ -202,6 +218,15 @@
     .math-inline {
       display: inline;
     }
+
+    /* ── 脚注列表（Markdown 的 [^1] 落在文末）── */
+    .footnotes p, .footnotes .list-item {
+      font-size: 14px;
+      color: #888888;
+      line-height: 1.6;
+    }
+    .footnotes p { margin: 1.2em 20px 0.4em; }
+    .footnotes sup { font-size: 12px; }
 
     /* ── 文章内容容器 ── */
     .post-content table {
